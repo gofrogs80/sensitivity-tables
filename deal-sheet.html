@@ -429,6 +429,22 @@
     padding:10px 0 4px;
   }
 
+  /* ---------- SPIDER CHART ---------- */
+  .radar-card{
+    background:#F8FAF4;
+    border:1px solid var(--paper-rule);
+    border-radius:8px;
+    padding:20px;
+    display:flex;
+    justify-content:center;
+  }
+  .radar-note{
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.5;
+    margin-top:12px;
+  }
+
   @media (max-width:860px){
     .app{ flex-direction:column; }
     .sidebar{ width:100%; flex:none; max-height:none; }
@@ -680,6 +696,7 @@ const state = {
   inputs: Object.fromEntries(INPUTS.map(i=>[i.key,i.default])),
   metric: 'year1CashOnCash',
   view: 'table',
+  spiderMode: 'single',
   axes: {
     rowVar:'interestRate1', colVar:'grossMonthlyRents',
     rowRange: {...INPUTS.find(i=>i.key==='interestRate1').range},
@@ -1094,6 +1111,167 @@ function renderTornadoView(container){
   });
 }
 
+/* ---------------- SPIDER CHART VIEW ---------------- */
+
+// Fixed hex values (not CSS var()) — SVG presentation attributes don't
+// reliably resolve custom properties across browsers.
+const SPIDER_COLORS = { ledger:'#2F5D3A', brass:'#B8863B', red:'#9A3A2C' };
+
+/** For each metric, the min/max it can plausibly hit by sweeping every input
+ * one at a time from its low to its high (holding everything else at base). */
+function computeMetricRanges(baseInputs){
+  const ranges = {};
+  const baseMetrics = computeMetrics(baseInputs);
+  Object.keys(METRICS).forEach(k=>{
+    let vals = [baseMetrics[k]];
+    INPUTS.forEach(inp=>{
+      const vLow = {...baseInputs, [inp.key]: inp.range.min};
+      const vHigh = {...baseInputs, [inp.key]: inp.range.max};
+      vals.push(computeMetrics(vLow)[k], computeMetrics(vHigh)[k]);
+    });
+    vals = vals.filter(isFinite);
+    ranges[k] = { min: Math.min(...vals), max: Math.max(...vals) };
+  });
+  return ranges;
+}
+
+function normalize01(val, key, ranges){
+  const r = ranges[key];
+  if(!isFinite(val)) return 0;
+  if(r.max===r.min) return 0.5;
+  return Math.max(0, Math.min(1, (val-r.min)/(r.max-r.min)));
+}
+
+/** Every input pushed toward (favorable=true) or away from (favorable=false)
+ * whichever of its low/high endpoints most helps `metricKey`. */
+function extremeScenario(baseInputs, metricKey, favorable){
+  const out = {...baseInputs};
+  INPUTS.forEach(inp=>{
+    const vLow = {...baseInputs, [inp.key]: inp.range.min};
+    const vHigh = {...baseInputs, [inp.key]: inp.range.max};
+    const mLow = computeMetrics(vLow)[metricKey];
+    const mHigh = computeMetrics(vHigh)[metricKey];
+    if(!isFinite(mLow) || !isFinite(mHigh) || mLow===mHigh){ return; }
+    const lowIsBetter = mLow > mHigh;
+    out[inp.key] = favorable
+      ? (lowIsBetter ? inp.range.min : inp.range.max)
+      : (lowIsBetter ? inp.range.max : inp.range.min);
+  });
+  return out;
+}
+
+function radarPoint(cx,cy,R,i,total,frac){
+  const angle = -Math.PI/2 + i*(2*Math.PI/total);
+  return [cx + R*frac*Math.cos(angle), cy + R*frac*Math.sin(angle)];
+}
+
+function buildRadarSVG(series, axisMetaList, size){
+  const cx=size/2, cy=size/2, R=size*0.32;
+  const total = axisMetaList.length;
+
+  const rings = [0.25,0.5,0.75,1];
+  const gridPolys = rings.map(f=>{
+    const pts = axisMetaList.map((_,i)=>radarPoint(cx,cy,R,i,total,f).join(',')).join(' ');
+    return `<polygon points="${pts}" fill="none" stroke="#D3DFC7" stroke-width="1"/>`;
+  }).join('');
+
+  const axisLines = axisMetaList.map((_,i)=>{
+    const [x,y] = radarPoint(cx,cy,R,i,total,1);
+    return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#D3DFC7" stroke-width="1"/>`;
+  }).join('');
+
+  const labels = axisMetaList.map((m,i)=>{
+    const [lx,ly] = radarPoint(cx,cy,R*1.26,i,total,1);
+    const anchor = Math.abs(lx-cx)<6 ? 'middle' : (lx>cx?'start':'end');
+    const dy = ly<cy-6 ? -4 : (ly>cy+6 ? 12 : 4);
+    return `<text x="${lx}" y="${ly+dy}" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600" fill="#1C2820" text-anchor="${anchor}">${m.label}</text>
+      <text x="${lx}" y="${ly+dy+13}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#61705F" text-anchor="${anchor}">${m.valueLabel}</text>`;
+  }).join('');
+
+  const seriesSVG = series.map(s=>{
+    const pts = s.values.map((v,i)=>radarPoint(cx,cy,R,i,total,v).join(',')).join(' ');
+    const dash = s.dashed ? ' stroke-dasharray="5,4"' : '';
+    const dots = s.values.map((v,i)=>{
+      const [x,y] = radarPoint(cx,cy,R,i,total,v);
+      return `<circle cx="${x}" cy="${y}" r="3.5" fill="${s.color}"/>`;
+    }).join('');
+    return `<polygon points="${pts}" fill="${s.color}" fill-opacity="0.16" stroke="${s.color}" stroke-width="2"${dash}/>${dots}`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${size} ${size}" width="100%" style="max-width:${size}px; display:block;">
+    ${gridPolys}${axisLines}${seriesSVG}${labels}
+  </svg>`;
+}
+
+function renderSpiderView(container){
+  const mode = state.spiderMode;
+  const ranges = computeMetricRanges(state.inputs);
+  const axisKeys = Object.keys(METRICS);
+
+  let series, legendHTML, scenarios;
+
+  if(mode==='single'){
+    const base = computeMetrics(state.inputs);
+    series = [{ name:'Base case', color:SPIDER_COLORS.ledger, values: axisKeys.map(k=>normalize01(base[k], k, ranges)) }];
+    legendHTML = `<span class="swatch"><span class="box" style="background:${SPIDER_COLORS.ledger}"></span> Base case</span>`;
+    scenarios = [{ label:'Base case', m: base }];
+  } else {
+    const pessInputs = extremeScenario(state.inputs, state.metric, false);
+    const optInputs = extremeScenario(state.inputs, state.metric, true);
+    const base = computeMetrics(state.inputs);
+    const pess = computeMetrics(pessInputs);
+    const opt = computeMetrics(optInputs);
+    series = [
+      { name:'Pessimistic', color:SPIDER_COLORS.red, dashed:true, values: axisKeys.map(k=>normalize01(pess[k], k, ranges)) },
+      { name:'Base case',   color:SPIDER_COLORS.brass, values: axisKeys.map(k=>normalize01(base[k], k, ranges)) },
+      { name:'Optimistic',  color:SPIDER_COLORS.ledger, dashed:true, values: axisKeys.map(k=>normalize01(opt[k], k, ranges)) },
+    ];
+    legendHTML = `
+      <span class="swatch"><span class="box" style="background:${SPIDER_COLORS.red}"></span> Pessimistic</span>
+      <span class="swatch"><span class="box" style="background:${SPIDER_COLORS.brass}"></span> Base case</span>
+      <span class="swatch"><span class="box" style="background:${SPIDER_COLORS.ledger}"></span> Optimistic</span>`;
+    scenarios = [ { label:'Pessimistic', m: pess }, { label:'Base case', m: base }, { label:'Optimistic', m: opt } ];
+  }
+
+  const axisMetaList = axisKeys.map(k=>({ key:k, label:METRICS[k].label, valueLabel: fmtByFormat(scenarios[scenarios.length===1?0:1].m[k], METRICS[k].format) }));
+  const svg = buildRadarSVG(series, axisMetaList, 400);
+
+  const tableRows = axisKeys.map(k=>{
+    const cells = scenarios.map(s=>`<td>${fmtByFormat(s.m[k], METRICS[k].format)}</td>`).join('');
+    return `<tr><th>${METRICS[k].label}</th>${cells}</tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <h2 class="panel-title">Spider chart — deal shape at a glance</h2>
+    <p class="panel-sub">Each axis is one pro forma return, scaled 0–100% against the plausible range for this deal (swept from every input's low/high, base case at the sidebar values).</p>
+    <div class="view-switch" style="margin-bottom:18px;">
+      <button id="sw-spider-single" class="${mode==='single'?'active':''}">Single Scenario</button>
+      <button id="sw-spider-compare" class="${mode==='compare'?'active':''}">Compare Scenarios</button>
+    </div>
+    ${mode==='compare' ? `
+      <div class="control" style="display:inline-block; margin-bottom:18px;">
+        <label>Optimistic / pessimistic direction based on</label>
+        <select id="ctl-spider-metric">
+          ${Object.entries(METRICS).map(([k,v])=>`<option value="${k}" ${state.metric===k?'selected':''}>${v.label}</option>`).join('')}
+        </select>
+      </div>` : ''}
+    <div class="radar-card">${svg}</div>
+    <div class="legend" style="margin-top:14px;">${legendHTML}</div>
+    ${mode==='compare' ? `<p class="radar-note">Optimistic/Pessimistic push every input to whichever end of its sensitivity range helps/hurts ${METRICS[state.metric].label} — so the shape shows how wide the realistic outcome cone is, not just one metric's swing.</p>` : ''}
+    <div class="table-wrap" style="margin-top:20px;">
+      <table class="sens">
+        <thead><tr><th class="corner">Metric</th>${scenarios.map(s=>`<th>${s.label}</th>`).join('')}</tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+  `;
+
+  container.querySelector('#sw-spider-single').addEventListener('click', ()=>{ state.spiderMode='single'; renderMain(); });
+  container.querySelector('#sw-spider-compare').addEventListener('click', ()=>{ state.spiderMode='compare'; renderMain(); });
+  const metricSel = container.querySelector('#ctl-spider-metric');
+  if(metricSel) metricSel.addEventListener('change', e=>{ state.metric = e.target.value; renderMain(); });
+}
+
 /* ---------------- MAIN RENDER ---------------- */
 
 function renderMain(){
@@ -1103,15 +1281,18 @@ function renderMain(){
     <div class="view-switch">
       <button id="sw-table" class="${state.view==='table'?'active':''}">Two-Way Table</button>
       <button id="sw-tornado" class="${state.view==='tornado'?'active':''}">Tornado: All Inputs</button>
+      <button id="sw-spider" class="${state.view==='spider'?'active':''}">Spider Chart</button>
     </div>
     <div id="view-holder"></div>
   `;
   main.querySelector('#sw-table').addEventListener('click', ()=>{ state.view='table'; renderMain(); });
   main.querySelector('#sw-tornado').addEventListener('click', ()=>{ state.view='tornado'; renderMain(); });
+  main.querySelector('#sw-spider').addEventListener('click', ()=>{ state.view='spider'; renderMain(); });
 
   const holder = main.querySelector('#view-holder');
   if(state.view==='table') renderTableView(holder);
-  else renderTornadoView(holder);
+  else if(state.view==='tornado') renderTornadoView(holder);
+  else renderSpiderView(holder);
 }
 
 renderSidebar();
