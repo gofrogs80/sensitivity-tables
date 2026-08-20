@@ -429,6 +429,69 @@
     padding:10px 0 4px;
   }
 
+  /* ---------- PRO FORMA STATEMENT ---------- */
+  .statement-wrap{
+    max-height:560px;
+    overflow:auto;
+    border:1px solid var(--paper-rule);
+    border-radius:8px;
+    background:#F8FAF4;
+  }
+  table.statement{
+    border-collapse:collapse;
+    width:100%;
+    min-width:640px;
+    font-family:var(--font-mono);
+    font-size:12px;
+  }
+  table.statement th, table.statement td{
+    padding:7px 12px;
+    text-align:right;
+    white-space:nowrap;
+    border-bottom:1px solid var(--paper-rule);
+  }
+  table.statement thead th{
+    position:sticky; top:0; z-index:2;
+    background:var(--ledger);
+    color:#F4F7EE;
+    font-weight:600;
+  }
+  table.statement thead th.line-item-head{
+    position:sticky; left:0; top:0; z-index:3;
+    text-align:left;
+    background:var(--ledger-deep);
+  }
+  table.statement td.line-item{
+    position:sticky; left:0; z-index:1;
+    text-align:left;
+    background:#F8FAF4;
+    color:var(--muted);
+    font-family:var(--font-body);
+    font-size:12px;
+    cursor:help;
+  }
+  table.statement tr.group-row td{
+    background:var(--green-bg);
+    color:var(--ledger-deep);
+    font-family:var(--font-body);
+    font-weight:700;
+    font-size:10.5px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    text-align:left;
+    position:sticky; left:0;
+  }
+  table.statement td.val{
+    color:var(--text);
+    cursor:help;
+  }
+  table.statement td.val.neg{ color:var(--red); }
+  .statement-hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:10px;
+  }
+
   /* ---------- SPIDER CHART ---------- */
   .radar-card{
     background:#F8FAF4;
@@ -1304,6 +1367,145 @@ function renderSpiderView(container){
   if(metricSel) metricSel.addEventListener('change', e=>{ state.metric = e.target.value; renderMain(); });
 }
 
+/* ---------------- PRO FORMA STATEMENT VIEW ----------------
+   Line-item Income Statement / Cash Flow / Balance Sheet / Disposition /
+   Rate of Return table, matching the legacy iqcalculators widget's
+   "Data Table" tab (RealEstateCalculator.tsx tableRows). */
+
+const STATEMENT_YEARS = [1,3,5,10,20,30];
+
+/** Sale economics if sold in year t — mirrors saleForYear() in the source UI. */
+function saleForYear(t, inp, res){
+  const y = res.years[t-1];
+  if(!y) return { salePrice:0, capGainsTax:0, recaptureTax:0, dispExp:0, netProceeds:0 };
+  const depreciableBasis = Math.max(0, inp.purchasePrice - inp.valueOfLand);
+  const annualDep = inp.depreciationYears>0 ? depreciableBasis/inp.depreciationYears : 0;
+  const salePrice = inp.valueOfProperty*Math.pow(1+inp.appreciationPct/100, t-1);
+  const dispExp = salePrice*(inp.expensesOnSalePct/100);
+  const accumulatedDep = Math.min(depreciableBasis, annualDep*Math.min(t, inp.depreciationYears));
+  const recaptureTax = accumulatedDep*(inp.marginalTaxPct/100);
+  const capGainsTax = Math.max(0, salePrice-inp.purchasePrice)*(inp.longTermCapGainsPct/100);
+  const netProceeds = salePrice - dispExp - y.loanBalance - recaptureTax - capGainsTax;
+  return { salePrice, capGainsTax, recaptureTax, dispExp, netProceeds };
+}
+
+/** IRR if sold in year t — same construction as calcRealEstate's running IRR
+ * (initial equity, after-tax cash flows through t, sale proceeds trailing). */
+function irrIfSoldInYear(t, inp, res, afterTax){
+  const flows = [-res.initialEquity];
+  for(let k=1;k<=t;k++) flows.push(res.years[k-1].cashFlowAfterTax);
+  const sale = saleForYear(t, inp, res);
+  const saleProceeds = afterTax
+    ? sale.salePrice - sale.dispExp - res.years[t-1].loanBalance - sale.recaptureTax - sale.capGainsTax
+    : sale.salePrice - sale.dispExp - res.years[t-1].loanBalance;
+  flows.push(saleProceeds);
+  return irrCalc(flows) ?? 0;
+}
+
+function fmtLine(val, fmt, negativeFlag){
+  if(fmt==='pct') return fmtPercent(val);
+  if(negativeFlag && val>0) return `(${fmtCurrency(val)})`;
+  return fmtCurrency(val);
+}
+
+function buildStatementRows(inp, res){
+  const y = t => res.years[t-1];
+  return [
+    { kind:'group', label:'Income Statement' },
+    { label:'Gross Income', fmt:'usd', getValue:t=>y(t).grossIncome,
+      formula:t=>`Monthly rent ($${inp.grossMonthlyRents.toLocaleString()}) × 12, grown ${inp.rentInflationPct}%/yr to Year ${t} = ${fmtCurrency(y(t).grossIncome)}` },
+    { label:'Less: Vacancy', fmt:'usd', negative:true, getValue:t=>y(t).vacancy,
+      formula:t=>`Gross Income (${fmtCurrency(y(t).grossIncome)}) × ${inp.vacancyPct}% vacancy = ${fmtCurrency(y(t).vacancy)}` },
+    { label:'Gross Operating Income', fmt:'usd', getValue:t=>y(t).grossOperatingIncome,
+      formula:t=>`Gross Income − Vacancy = ${fmtCurrency(y(t).grossOperatingIncome)}` },
+    { label:'Less: Expenses', fmt:'usd', negative:true, getValue:t=>y(t).operatingExpenses,
+      formula:()=>`Property taxes, insurance, utilities, repairs, HOA & other, inflated ${inp.expenseInflationPct}%/yr.` },
+    { label:'NOI (EBITDA)', fmt:'usd', getValue:t=>y(t).noi,
+      formula:t=>`Gross Operating Income − Expenses = ${fmtCurrency(y(t).noi)}` },
+    { label:'Less: Interest', fmt:'usd', negative:true, getValue:t=>y(t).interest,
+      formula:t=>`Interest portion of this year's loan payment(s), from amortization = ${fmtCurrency(y(t).interest)}.` },
+    { label:'Less: Depreciation', fmt:'usd', negative:true, getValue:t=>y(t).depreciation,
+      formula:t=>`Depreciable basis ÷ ${inp.depreciationYears} yrs, final fractional year prorated. Year ${t}: ${fmtCurrency(y(t).depreciation)}.` },
+    { label:'Taxable Income', fmt:'usd', getValue:t=>y(t).taxableIncome,
+      formula:t=>`NOI − Interest − Depreciation = ${fmtCurrency(y(t).taxableIncome)}` },
+    { label:'Less: Income Tax', fmt:'usd', negative:true, getValue:t=>y(t).taxes,
+      formula:t=>`max(Taxable Income, $0) × ${inp.marginalTaxPct}% marginal rate = ${fmtCurrency(y(t).taxes)}` },
+    { label:'Net Income', fmt:'usd', getValue:t=>y(t).netIncome,
+      formula:t=>`Taxable Income − Income Tax = ${fmtCurrency(y(t).netIncome)}` },
+
+    { kind:'group', label:'Cash Flow' },
+    { label:'Cash Flow Before Tax', fmt:'usd', getValue:t=>y(t).cashFlowBeforeTax,
+      formula:t=>`NOI − this year's total loan payment(s) = ${fmtCurrency(y(t).cashFlowBeforeTax)}` },
+    { label:'Cash Flow After Tax', fmt:'usd', getValue:t=>y(t).cashFlowAfterTax,
+      formula:t=>`Cash Flow Before Tax − Income Tax = ${fmtCurrency(y(t).cashFlowAfterTax)}` },
+
+    { kind:'group', label:'Balance Sheet' },
+    { label:'Loan Balance', fmt:'usd', getValue:t=>y(t).loanBalance,
+      formula:t=>`Starting balance reduced by cumulative principal paid through Year ${t} = ${fmtCurrency(y(t).loanBalance)}.` },
+    { label:'Property Value', fmt:'usd', getValue:t=>y(t).propertyValue,
+      formula:t=>`Value of Property × (1 + ${inp.appreciationPct}%)^${t-1} = ${fmtCurrency(y(t).propertyValue)}` },
+    { label:'Loan to Value', fmt:'pct', getValue:t=>y(t).loanToValue,
+      formula:t=>`Loan Balance ÷ Property Value = ${(y(t).loanToValue).toFixed(2)}%` },
+
+    { kind:'group', label:'Disposition' },
+    { label:'Sale Price', fmt:'usd', getValue:t=>saleForYear(t,inp,res).salePrice,
+      formula:t=>`Value of Property × (1 + ${inp.appreciationPct}%)^${t-1} = ${fmtCurrency(saleForYear(t,inp,res).salePrice)}` },
+    { label:'Capital Gains Tax', fmt:'usd', negative:true, getValue:t=>saleForYear(t,inp,res).capGainsTax,
+      formula:t=>`(Sale Price − Purchase Price) × ${inp.longTermCapGainsPct}% = ${fmtCurrency(saleForYear(t,inp,res).capGainsTax)}` },
+    { label:'Depreciation Recapture Tax', fmt:'usd', negative:true, getValue:t=>saleForYear(t,inp,res).recaptureTax,
+      formula:t=>`Cumulative depreciation claimed × ${inp.marginalTaxPct}% marginal rate = ${fmtCurrency(saleForYear(t,inp,res).recaptureTax)}` },
+    { label:'Disposition Expenses', fmt:'usd', negative:true, getValue:t=>saleForYear(t,inp,res).dispExp,
+      formula:t=>`Sale Price × ${inp.expensesOnSalePct}% expenses on sale = ${fmtCurrency(saleForYear(t,inp,res).dispExp)}` },
+    { label:'Net Sale Proceeds', fmt:'usd', getValue:t=>saleForYear(t,inp,res).netProceeds,
+      formula:t=>`Sale Price − Disposition Expenses − Loan Balance − Recapture Tax − Capital Gains Tax = ${fmtCurrency(saleForYear(t,inp,res).netProceeds)}` },
+
+    { kind:'group', label:'Rate of Return' },
+    { label:'Before Tax IRR', fmt:'pct', getValue:t=>irrIfSoldInYear(t,inp,res,false),
+      formula:t=>`IRR on initial equity (${fmtCurrency(res.initialEquity)}), Cash Flow Before Tax through Year ${t}, then before-tax sale proceeds one period later.` },
+    { label:'After Tax IRR', fmt:'pct', getValue:t=>irrIfSoldInYear(t,inp,res,true),
+      formula:t=>`Same as Before Tax IRR, using Cash Flow After Tax and after-tax sale proceeds net of recapture + capital gains tax.` },
+  ];
+}
+
+function renderStatementView(container){
+  const inp = state.inputs;
+  const res = calcRealEstate(inp);
+  const years = STATEMENT_YEARS.filter(t=>t<=res.years.length);
+  const rows = buildStatementRows(inp, res);
+
+  let thead = `<thead><tr>
+    <th class="line-item-head">Line Item</th>
+    ${years.map(t=>`<th>Year ${t}</th>`).join('')}
+  </tr></thead>`;
+
+  let tbody = '<tbody>';
+  rows.forEach(row=>{
+    if(row.kind==='group'){
+      tbody += `<tr class="group-row"><td colspan="${years.length+1}">${row.label}</td></tr>`;
+      return;
+    }
+    tbody += `<tr><td class="line-item" title="${row.formula ? row.formula(years[0]).replace(/"/g,'&quot;') : ''}">${row.label}</td>`;
+    years.forEach(t=>{
+      const val = row.getValue(t);
+      const display = fmtLine(val, row.fmt, row.negative);
+      const tooltip = row.formula ? row.formula(t).replace(/"/g,'&quot;') : '';
+      const negClass = row.fmt==='pct' && val<0 ? 'neg' : '';
+      tbody += `<td class="val ${negClass}" title="${tooltip}">${display}</td>`;
+    });
+    tbody += '</tr>';
+  });
+  tbody += '</tbody>';
+
+  container.innerHTML = `
+    <h2 class="panel-title">Pro forma statement</h2>
+    <p class="panel-sub">Full year-by-year income statement, cash flow, balance sheet, disposition, and rate-of-return — the same line items as the iqcalculators.com widget's data table.</p>
+    <p class="statement-hint">Hover any number to see how it's calculated.</p>
+    <div class="statement-wrap">
+      <table class="statement">${thead}${tbody}</table>
+    </div>
+  `;
+}
+
 /* ---------------- MAIN RENDER ---------------- */
 
 function renderMain(){
@@ -1314,16 +1516,19 @@ function renderMain(){
       <button id="sw-table" class="${state.view==='table'?'active':''}">Two-Way Table</button>
       <button id="sw-tornado" class="${state.view==='tornado'?'active':''}">Tornado: All Inputs</button>
       <button id="sw-spider" class="${state.view==='spider'?'active':''}">Spider Chart</button>
+      <button id="sw-statement" class="${state.view==='statement'?'active':''}">Pro Forma Statement</button>
     </div>
     <div id="view-holder"></div>
   `;
   main.querySelector('#sw-table').addEventListener('click', ()=>{ state.view='table'; renderMain(); });
   main.querySelector('#sw-tornado').addEventListener('click', ()=>{ state.view='tornado'; renderMain(); });
   main.querySelector('#sw-spider').addEventListener('click', ()=>{ state.view='spider'; renderMain(); });
+  main.querySelector('#sw-statement').addEventListener('click', ()=>{ state.view='statement'; renderMain(); });
 
   const holder = main.querySelector('#view-holder');
   if(state.view==='table') renderTableView(holder);
   else if(state.view==='tornado') renderTornadoView(holder);
+  else if(state.view==='statement') renderStatementView(holder);
   else renderSpiderView(holder);
 }
 
