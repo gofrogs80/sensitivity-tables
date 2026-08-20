@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deal Sheet. — Rental Property Sensitivity</title>
+<title>Deal Sheet. — Rental Property Pro Forma</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -65,7 +65,7 @@
     margin:0;
     color:var(--muted-light);
     font-size:14.5px;
-    max-width:560px;
+    max-width:620px;
     line-height:1.5;
   }
   .app{
@@ -83,6 +83,8 @@
     background-image:linear-gradient(180deg, var(--ink-panel-2), var(--ink-panel) 140px);
     color:#DCE6D3;
     padding:26px 22px 30px;
+    max-height:calc(100vh - 40px);
+    overflow-y:auto;
   }
   .sidebar-title{
     font-family:var(--font-display);
@@ -131,6 +133,9 @@
   .field-input.focus-ring:focus-within{
     border-color:var(--brass-light);
   }
+  .field-input.invalid{
+    border-color:var(--red);
+  }
   .field-input span{
     font-family:var(--font-mono);
     font-size:11.5px;
@@ -162,8 +167,8 @@
   }
   .summary-strip{
     display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:14px;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:12px;
     margin-bottom:26px;
   }
   .stat{
@@ -175,15 +180,15 @@
   }
   .stat .k{
     font-family:var(--font-mono);
-    font-size:10px;
-    letter-spacing:.08em;
+    font-size:9.5px;
+    letter-spacing:.06em;
     text-transform:uppercase;
     color:var(--muted);
     margin-bottom:4px;
   }
   .stat .v{
     font-family:var(--font-mono);
-    font-size:19px;
+    font-size:17px;
     font-weight:600;
     color:var(--text);
   }
@@ -263,6 +268,22 @@
   .range-inputs input{ width:70px; font-family:var(--font-mono); }
   .range-inputs .sep{ color:var(--muted); font-size:11px; }
 
+  .range-warning{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    background:var(--red-bg);
+    border:1px solid var(--red);
+    border-radius:7px;
+    padding:10px 14px;
+    margin-bottom:16px;
+    font-size:12.5px;
+    color:var(--text);
+  }
+  .range-warning .btn{ flex:0 0 auto; }
+
   /* ---------- TABLE ---------- */
   .table-wrap{
     overflow-x:auto;
@@ -332,6 +353,7 @@
     margin-top:12px;
     font-size:11.5px;
     color:var(--muted);
+    flex-wrap:wrap;
   }
   .legend .swatch{ display:inline-flex; align-items:center; gap:6px; }
   .legend .box{ width:12px; height:12px; border-radius:3px; display:inline-block; border:1px solid var(--paper-rule); }
@@ -354,10 +376,10 @@
 
   /* ---------- TORNADO ---------- */
   .tornado-metric{ margin-bottom:18px; }
-  .tornado-chart{ background:#F8FAF4; border:1px solid var(--paper-rule); border-radius:8px; padding:18px 22px 8px; }
+  .tornado-chart{ background:#F8FAF4; border:1px solid var(--paper-rule); border-radius:8px; padding:30px 22px 8px; }
   .tornado-row{
     display:grid;
-    grid-template-columns:168px 1fr;
+    grid-template-columns:180px 1fr;
     align-items:center;
     gap:14px;
     padding:9px 0;
@@ -365,7 +387,7 @@
   }
   .tornado-row:last-child{ border-bottom:none; }
   .tornado-label{
-    font-size:12.5px;
+    font-size:12px;
     font-weight:600;
     color:var(--text);
   }
@@ -397,6 +419,7 @@
     color:var(--muted);
     white-space:nowrap;
   }
+  .bar-tag.stacked{ top:-29px; }
   .tornado-foot{
     display:flex;
     justify-content:space-between;
@@ -408,9 +431,9 @@
 
   @media (max-width:860px){
     .app{ flex-direction:column; }
-    .sidebar{ width:100%; flex:none; }
+    .sidebar{ width:100%; flex:none; max-height:none; }
     .summary-strip{ grid-template-columns:repeat(2,1fr); }
-    .tornado-row{ grid-template-columns:120px 1fr; }
+    .tornado-row{ grid-template-columns:130px 1fr; }
   }
 </style>
 </head>
@@ -419,7 +442,7 @@
   <div class="masthead">
     <p class="eyebrow">Rental Property Underwriting</p>
     <h1>Deal Sheet.</h1>
-    <p>Set your assumptions once, then stress-test the deal — pick any two inputs for a two-way table, or see every input ranked by how much it swings the number you care about.</p>
+    <p>A full multi-year pro forma — two mortgages, rent &amp; expense inflation, straight-line depreciation, income tax, and a hypothetical sale with depreciation recapture and capital gains — then stress-test any two assumptions against each other, or rank every lever by how much it swings the return you care about.</p>
   </div>
 
   <div class="app">
@@ -429,64 +452,238 @@
 </div>
 
 <script>
-/* ---------------- MODEL DEFINITION ---------------- */
+/* ================================================================
+   PRO FORMA ENGINE
+   Ported line-for-line from iqcalculators.com's rental property
+   calculator (lib/calc/realEstate.ts, amortization.ts, investing.ts).
+   ================================================================ */
+
+function monthlyPayment(principal, annualRatePct, termMonths){
+  if(termMonths<=0) return 0;
+  const r = annualRatePct/100/12;
+  if(r===0) return principal/termMonths;
+  return (principal*r)/(1-Math.pow(1+r,-termMonths));
+}
+
+function amortizeLoan(principal, annualRatePct, termMonths){
+  const r = annualRatePct/100/12;
+  const basePayment = monthlyPayment(principal, annualRatePct, termMonths);
+  const schedule = [];
+  let balance = principal, month = 0;
+  const maxMonths = 1200;
+  while(balance>0.005 && month<maxMonths){
+    month += 1;
+    const interest = balance*r;
+    let principalPart = basePayment-interest;
+    if(principalPart<0) principalPart = 0;
+    if(principalPart>balance) principalPart = balance;
+    balance -= principalPart;
+    schedule.push({ interest, principal:principalPart, endingBalance: balance<0?0:balance });
+  }
+  return { payment: basePayment, schedule };
+}
+
+function yearlyMortgage(amount, ratePct, lengthYears, years){
+  const termMonths = Math.round(lengthYears*12);
+  const result = amortizeLoan(amount, ratePct, termMonths);
+  const annualPayment = result.payment*12;
+  const perYear = [];
+  for(let y=1;y<=years;y++){
+    let interest=0, principal=0;
+    for(let mth=(y-1)*12; mth<y*12; mth++){
+      const row = result.schedule[mth];
+      if(row){ interest+=row.interest; principal+=row.principal; }
+    }
+    const lastRow = result.schedule[Math.min(y*12, result.schedule.length)-1];
+    perYear.push({ interest, principal, balance: lastRow? lastRow.endingBalance : 0 });
+  }
+  return { annualPayment, perYear };
+}
+
+function npvCalc(annualRatePct, cashflows){
+  const r = annualRatePct/100;
+  return cashflows.reduce((acc,cf,t)=> acc + cf/Math.pow(1+r,t), 0);
+}
+
+/** IRR via sign-change scan + bisection, matches investing.ts irr(). */
+function irrCalc(cashflows){
+  if(cashflows.length<2) return null;
+  const f = ratePct => npvCalc(ratePct, cashflows);
+  let prevRate=-99, prevVal=f(prevRate);
+  for(let rate=-98; rate<=1000; rate+=1){
+    const val = f(rate);
+    if(prevVal===0) return prevRate;
+    if((prevVal<0 && val>0) || (prevVal>0 && val<0)){
+      let lo=prevRate, hi=rate;
+      for(let i=0;i<200;i++){
+        const mid=(lo+hi)/2;
+        const v=f(mid);
+        if(Math.abs(v)<1e-7) return mid;
+        if((f(lo)<0 && v<0) || (f(lo)>0 && v>0)) lo=mid; else hi=mid;
+      }
+      return (lo+hi)/2;
+    }
+    prevRate=rate; prevVal=val;
+  }
+  return null;
+}
+
+/**
+ * Full pro forma. Mirrors calcRealEstate() exactly (horizon = max(30, sellYear),
+ * straight-line depreciation with prorated final year, sale in the chosen year
+ * with recapture + capital-gains tax, IRR on initial equity + after-tax cash
+ * flows + sale proceeds trailing one period later).
+ */
+function calcRealEstate(inp){
+  const horizon = Math.max(30, Math.ceil(inp.sellYear));
+  const tax = inp.marginalTaxPct/100;
+
+  const m1 = yearlyMortgage(inp.mortgageAmount1, inp.interestRate1, inp.mortgageLength1, horizon);
+  const m2 = yearlyMortgage(inp.mortgageAmount2, inp.interestRate2, inp.mortgageLength2, horizon);
+
+  const depreciableBasis = Math.max(0, inp.purchasePrice - inp.valueOfLand);
+  const annualDepreciation = inp.depreciationYears>0 ? depreciableBasis/inp.depreciationYears : 0;
+  const depYearsFull = Math.floor(inp.depreciationYears);
+  const depYearsFrac = inp.depreciationYears - depYearsFull;
+  const baseOpex = inp.propertyTaxes + inp.insurance + inp.utilities + inp.repairs + inp.hoa + inp.otherExpenses;
+
+  const initialEquity = inp.purchasePrice + inp.acquisitionExpenses - inp.mortgageAmount1 - inp.mortgageAmount2;
+
+  const years = [];
+  for(let t=1;t<=horizon;t++){
+    const grossIncome = inp.grossMonthlyRents*12*Math.pow(1+inp.rentInflationPct/100, t-1);
+    const vacancy = grossIncome*(inp.vacancyPct/100);
+    const grossOperatingIncome = grossIncome-vacancy;
+    const operatingExpenses = baseOpex*Math.pow(1+inp.expenseInflationPct/100, t-1);
+    const noi = grossOperatingIncome-operatingExpenses;
+
+    const interest = m1.perYear[t-1].interest + m2.perYear[t-1].interest;
+    const principal = m1.perYear[t-1].principal + m2.perYear[t-1].principal;
+    const loanBalance = m1.perYear[t-1].balance + m2.perYear[t-1].balance;
+    const debtService = m1.annualPayment + m2.annualPayment;
+
+    const depreciation = t<=depYearsFull ? annualDepreciation
+      : (depYearsFrac>0 && t===depYearsFull+1 ? annualDepreciation*depYearsFrac : 0);
+    const taxableIncome = noi-interest-depreciation;
+    const taxes = Math.max(0,taxableIncome)*tax;
+    const netIncome = taxableIncome-taxes;
+
+    const cashFlowBeforeTax = noi-debtService;
+    const cashFlowAfterTax = cashFlowBeforeTax-taxes;
+
+    const propertyValue = inp.valueOfProperty*Math.pow(1+inp.appreciationPct/100, t-1);
+    const loanToValue = propertyValue>0 ? (loanBalance/propertyValue)*100 : 0;
+
+    years.push({ year:t, grossIncome, vacancy, grossOperatingIncome, operatingExpenses, noi,
+      interest, principal, depreciation, taxableIncome, taxes, netIncome, debtService,
+      cashFlowBeforeTax, cashFlowAfterTax, loanBalance, propertyValue, loanToValue });
+  }
+
+  const saleAt = t => {
+    const y = years[t-1];
+    const salePrice = inp.valueOfProperty*Math.pow(1+inp.appreciationPct/100, t-1);
+    const saleExpenses = salePrice*(inp.expensesOnSalePct/100);
+    const accumulatedDepreciation = Math.min(depreciableBasis, annualDepreciation*Math.min(t, inp.depreciationYears));
+    const recaptureTax = accumulatedDepreciation*(inp.marginalTaxPct/100);
+    const capitalGainTax = Math.max(0, salePrice-inp.purchasePrice)*(inp.longTermCapGainsPct/100);
+    const beforeTax = salePrice-saleExpenses-y.loanBalance;
+    const afterTax = beforeTax-recaptureTax-capitalGainTax;
+    return { salePrice, saleExpenses, accumulatedDepreciation, recaptureTax, capitalGainTax, beforeTax, afterTax };
+  };
+
+  const sellYear = Math.max(1, Math.min(horizon, Math.round(inp.sellYear)));
+  const sale = saleAt(sellYear);
+
+  // IRR on initial equity + after-tax cash flows through sellYear, with sale
+  // proceeds trailing one period later (matches the legacy widget exactly).
+  const bt=[-initialEquity], at=[-initialEquity];
+  for(let k=1;k<=sellYear;k++){
+    bt.push(years[k-1].cashFlowAfterTax);
+    at.push(years[k-1].cashFlowAfterTax);
+  }
+  bt.push(sale.beforeTax);
+  at.push(sale.afterTax);
+  const beforeTaxIRR = irrCalc(bt) ?? 0;
+  const afterTaxIRR = irrCalc(at) ?? 0;
+
+  const discountedFlows = [];
+  for(let t=1;t<=sellYear;t++) discountedFlows.push(years[t-1].cashFlowAfterTax);
+  discountedFlows.push(sale.afterTax);
+  const npvOfCashFlows = npvCalc(inp.discountRatePct, [0, ...discountedFlows]);
+  const accumDepAtSale = Math.min(depreciableBasis, annualDepreciation*Math.min(sellYear, inp.depreciationYears));
+
+  return {
+    years, initialEquity,
+    year1CashOnCash: initialEquity>0 ? (years[0].cashFlowBeforeTax/initialEquity)*100 : 0,
+    year1EquityBuildUp: initialEquity>0 ? (years[0].principal/initialEquity)*100 : 0,
+    npvNetOfEquity: npvOfCashFlows - initialEquity,
+    taxSavingsFromDepreciation: accumDepAtSale*(inp.marginalTaxPct/100),
+    beforeTaxIRR, afterTaxIRR,
+    saleYear: sellYear,
+    netSaleProceedsAfterTax: sale.afterTax,
+    year1NOI: years[0].noi,
+    year1CashFlowAfterTax: years[0].cashFlowAfterTax,
+  };
+}
+
+/* ---------------- INPUTS & METRICS ---------------- */
 
 const INPUTS = [
-  { key:'price', label:'Purchase price', group:'Purchase & financing', format:'currency', default:350000, step:5000, min:0, range:{min:250000,max:450000,step:25000} },
-  { key:'downPct', label:'Down payment', group:'Purchase & financing', format:'percent', default:20, step:1, min:0, max:100, range:{min:10,max:30,step:5} },
-  { key:'closingPct', label:'Closing costs', group:'Purchase & financing', format:'percent', default:3, step:0.5, min:0, range:{min:1,max:5,step:1} },
-  { key:'rate', label:'Interest rate', group:'Purchase & financing', format:'percent', default:6.5, step:0.125, min:0, range:{min:4.5,max:8.5,step:0.5} },
-  { key:'term', label:'Loan term', group:'Purchase & financing', format:'years', default:30, step:5, min:5, max:40, range:{min:15,max:30,step:5} },
-  { key:'rent', label:'Monthly rent', group:'Income', format:'currency', default:2600, step:50, min:0, range:{min:2000,max:3200,step:200} },
-  { key:'vacancyPct', label:'Vacancy rate', group:'Income', format:'percent', default:5, step:1, min:0, range:{min:0,max:15,step:3} },
-  { key:'taxPct', label:'Property tax (of price/yr)', group:'Expenses', format:'percent', default:1.2, step:0.1, min:0, range:{min:0.6,max:2.4,step:0.3} },
-  { key:'insurance', label:'Insurance (annual)', group:'Expenses', format:'currency', default:1400, step:100, min:0, range:{min:800,max:2400,step:400} },
-  { key:'maintPct', label:'Maintenance (of rent)', group:'Expenses', format:'percent', default:8, step:1, min:0, range:{min:4,max:15,step:3} },
-  { key:'mgmtPct', label:'Property management (of rent)', group:'Expenses', format:'percent', default:8, step:1, min:0, range:{min:0,max:12,step:3} },
-  { key:'hoa', label:'HOA / other fees (monthly)', group:'Expenses', format:'currency', default:0, step:25, min:0, range:{min:0,max:300,step:75} },
+  // Purchase
+  { key:'purchasePrice', label:'Purchase price', group:'Purchase', format:'currency', default:250000, step:5000, min:0, range:{min:150000,max:400000,step:25000} },
+  { key:'acquisitionExpenses', label:'Acquisition expenses', group:'Purchase', format:'currency', default:5000, step:500, min:0, range:{min:0,max:15000,step:2500} },
+  { key:'valueOfProperty', label:'Value of property', group:'Purchase', format:'currency', default:270000, step:5000, min:0, range:{min:150000,max:400000,step:25000} },
+  { key:'valueOfLand', label:'Value of land', group:'Purchase', format:'currency', default:50000, step:5000, min:0, range:{min:0,max:100000,step:10000} },
+  // Financing
+  { key:'mortgageAmount1', label:'1st mortgage amount', group:'Financing', format:'currency', default:150000, step:5000, min:0, range:{min:0,max:300000,step:25000} },
+  { key:'interestRate1', label:'1st interest rate', group:'Financing', format:'percent', default:5, step:0.125, min:0, range:{min:3,max:9,step:0.5} },
+  { key:'mortgageLength1', label:'1st mortgage length', group:'Financing', format:'years', default:30, step:5, min:5, max:40, range:{min:15,max:40,step:5} },
+  { key:'mortgageAmount2', label:'2nd mortgage amount', group:'Financing', format:'currency', default:0, step:5000, min:0, range:{min:0,max:100000,step:25000} },
+  { key:'interestRate2', label:'2nd interest rate', group:'Financing', format:'percent', default:0, step:0.125, min:0, range:{min:0,max:9,step:1} },
+  { key:'mortgageLength2', label:'2nd mortgage length', group:'Financing', format:'years', default:30, step:5, min:5, max:40, range:{min:15,max:40,step:5} },
+  // Income
+  { key:'grossMonthlyRents', label:'Gross monthly rents', group:'Income', format:'currency', default:1500, step:50, min:0, range:{min:1000,max:2500,step:250} },
+  { key:'vacancyPct', label:'Vacancy allowance', group:'Income', format:'percent', default:10, step:1, min:0, max:100, range:{min:0,max:20,step:5} },
+  { key:'rentInflationPct', label:'Annual rent inflation', group:'Income', format:'percent', default:3, step:0.5, min:-10, range:{min:0,max:6,step:1} },
+  { key:'marginalTaxPct', label:'Marginal tax rate', group:'Income', format:'percent', default:25, step:1, min:0, max:60, range:{min:0,max:40,step:5} },
+  // Annual expenses
+  { key:'propertyTaxes', label:'Property taxes', group:'Annual Expenses', format:'currency', default:400, step:50, min:0, range:{min:200,max:800,step:100} },
+  { key:'insurance', label:'Insurance', group:'Annual Expenses', format:'currency', default:350, step:50, min:0, range:{min:150,max:700,step:100} },
+  { key:'utilities', label:'Utilities', group:'Annual Expenses', format:'currency', default:300, step:50, min:0, range:{min:0,max:600,step:100} },
+  { key:'repairs', label:'Repairs & maintenance', group:'Annual Expenses', format:'currency', default:1000, step:100, min:0, range:{min:0,max:2000,step:250} },
+  { key:'hoa', label:'HOA fees', group:'Annual Expenses', format:'currency', default:0, step:25, min:0, range:{min:0,max:300,step:50} },
+  { key:'otherExpenses', label:'Other expenses', group:'Annual Expenses', format:'currency', default:0, step:50, min:0, range:{min:0,max:1000,step:200} },
+  { key:'expenseInflationPct', label:'Annual expense inflation', group:'Annual Expenses', format:'percent', default:3, step:0.5, min:-10, range:{min:0,max:6,step:1} },
+  // Disposition
+  { key:'depreciationYears', label:'Depreciation schedule (yrs)', group:'Disposition', format:'years', default:27.5, step:0.5, min:1, range:{min:27.5,max:39,step:11.5} },
+  { key:'longTermCapGainsPct', label:'Long-term cap gains tax', group:'Disposition', format:'percent', default:15, step:1, min:0, max:50, range:{min:0,max:20,step:5} },
+  { key:'appreciationPct', label:'Asset appreciation rate', group:'Disposition', format:'percent', default:2, step:0.5, min:-10, range:{min:0,max:6,step:1} },
+  { key:'expensesOnSalePct', label:'Expenses on sale', group:'Disposition', format:'percent', default:2, step:0.5, min:0, max:20, range:{min:0,max:8,step:2} },
+  { key:'sellYear', label:'Hypothetical sell year', group:'Disposition', format:'years', default:30, step:1, min:1, max:40, range:{min:5,max:30,step:5} },
+  { key:'discountRatePct', label:'Discount rate (NPV)', group:'Disposition', format:'percent', default:5, step:0.5, min:0, range:{min:2,max:10,step:2} },
 ];
 
 const METRICS = {
-  cashFlowMonthly: { label:'Monthly Cash Flow', format:'currency' },
-  cashOnCash:      { label:'Cash-on-Cash Return', format:'percent' },
-  capRate:         { label:'Cap Rate', format:'percent' },
-  noiAnnual:        { label:'Net Operating Income (annual)', format:'currency' },
+  year1CashOnCash:      { label:'Year 1 Cash-on-Cash', format:'percent' },
+  year1EquityBuildUp:   { label:'Year 1 Equity Build-Up', format:'percent' },
+  npvNetOfEquity:        { label:'NPV of Cash Flows', format:'currency' },
+  taxSavingsFromDepreciation: { label:'Tax Savings (Depreciation)', format:'currency' },
+  beforeTaxIRR:          { label:'Before-Tax IRR', format:'percent' },
+  afterTaxIRR:           { label:'After-Tax IRR', format:'percent' },
 };
 
-function computeMetrics(v){
-  const loanAmt = v.price * (1 - v.downPct/100);
-  const downAmt = v.price * v.downPct/100;
-  const closingAmt = v.price * v.closingPct/100;
-  const cashInvested = downAmt + closingAmt;
-  const i = (v.rate/100)/12;
-  const n = v.term*12;
-  const mortgagePmt = i===0 ? loanAmt/n : loanAmt*i/(1-Math.pow(1+i,-n));
-  const vacancyLoss = v.rent * v.vacancyPct/100;
-  const effGrossIncome = v.rent - vacancyLoss;
-  const taxMonthly = v.price*(v.taxPct/100)/12;
-  const insMonthly = v.insurance/12;
-  const maintMonthly = v.rent*v.maintPct/100;
-  const mgmtMonthly = v.rent*v.mgmtPct/100;
-  const opex = taxMonthly + insMonthly + maintMonthly + mgmtMonthly + v.hoa;
-  const noiMonthly = effGrossIncome - opex;
-  const noiAnnual = noiMonthly*12;
-  const cashFlowMonthly = noiMonthly - mortgagePmt;
-  const cashFlowAnnual = cashFlowMonthly*12;
-  const capRate = v.price>0 ? (noiAnnual/v.price)*100 : 0;
-  const cashOnCash = cashInvested>0 ? (cashFlowAnnual/cashInvested)*100 : 0;
-  return { loanAmt, downAmt, closingAmt, cashInvested, mortgagePmt, cashFlowMonthly, cashFlowAnnual, noiAnnual, capRate, cashOnCash };
-}
+function computeMetrics(v){ return calcRealEstate(v); }
 
 /* ---------------- STATE ---------------- */
 
 const state = {
   inputs: Object.fromEntries(INPUTS.map(i=>[i.key,i.default])),
-  metric: 'cashFlowMonthly',
+  metric: 'year1CashOnCash',
   view: 'table',
   axes: {
-    rowVar:'rate', colVar:'rent',
-    rowRange: {...INPUTS.find(i=>i.key==='rate').range},
-    colRange: {...INPUTS.find(i=>i.key==='rent').range},
+    rowVar:'interestRate1', colVar:'grossMonthlyRents',
+    rowRange: {...INPUTS.find(i=>i.key==='interestRate1').range},
+    colRange: {...INPUTS.find(i=>i.key==='grossMonthlyRents').range},
   }
 };
 
@@ -534,12 +731,16 @@ function mixColor(t, a, b){
 const RED_RGB=[241,214,205], GREEN_RGB=[215,231,204];
 
 function inputByKey(k){ return INPUTS.find(i=>i.key===k); }
+function valueInRange(val, r){
+  const lo = Math.min(r.min, r.max), hi = Math.max(r.min, r.max);
+  return val >= lo - 1e-9 && val <= hi + 1e-9;
+}
 
 /* ---------------- SIDEBAR ---------------- */
 
 function renderSidebar(){
   const sidebar = document.getElementById('sidebar');
-  const groups = ['Purchase & financing','Income','Expenses'];
+  const groups = ['Purchase','Financing','Income','Annual Expenses','Disposition'];
   let html = `<div class="sidebar-title">Property assumptions</div>
   <div class="sidebar-sub">Base case — every table and chart flexes around these.</div>`;
 
@@ -564,8 +765,23 @@ function renderSidebar(){
   sidebar.querySelectorAll('input[data-key]').forEach(el=>{
     el.addEventListener('input', e=>{
       const k = e.target.dataset.key;
-      const val = parseFloat(e.target.value);
-      state.inputs[k] = isNaN(val)? 0 : val;
+      const inp = inputByKey(k);
+      let val = parseFloat(e.target.value);
+      if(isNaN(val)) val = 0;
+      const outOfBounds = (inp.min!=null && val<inp.min) || (inp.max!=null && val>inp.max);
+      e.target.closest('.field-input').classList.toggle('invalid', outOfBounds);
+      state.inputs[k] = val;
+      renderMain();
+    });
+    el.addEventListener('blur', e=>{
+      const k = e.target.dataset.key;
+      const inp = inputByKey(k);
+      let val = state.inputs[k];
+      if(inp.min!=null) val = Math.max(inp.min, val);
+      if(inp.max!=null) val = Math.min(inp.max, val);
+      state.inputs[k] = val;
+      e.target.value = val;
+      e.target.closest('.field-input').classList.remove('invalid');
       renderMain();
     });
   });
@@ -575,26 +791,17 @@ function renderSidebar(){
 
 function summaryStripHTML(){
   const m = computeMetrics(state.inputs);
-  const metricMeta = METRICS[state.metric];
-  const metricVal = m[state.metric];
   return `
     <div class="summary-strip">
-      <div class="stat">
-        <div class="k">Loan amount</div>
-        <div class="v">${fmtCurrency(m.loanAmt)}</div>
-      </div>
-      <div class="stat">
-        <div class="k">Cash invested</div>
-        <div class="v">${fmtCurrency(m.cashInvested)}</div>
-      </div>
-      <div class="stat">
-        <div class="k">Monthly mortgage (P&amp;I)</div>
-        <div class="v">${fmtCurrency(m.mortgagePmt)}</div>
-      </div>
-      <div class="stat highlight">
-        <div class="k">${metricMeta.label} (base case)</div>
-        <div class="v ${metricVal<0?'neg':''}">${fmtByFormat(metricVal, metricMeta.format)}</div>
-      </div>
+      ${Object.entries(METRICS).map(([k,meta])=>{
+        const val = m[k];
+        const isPrimary = k===state.metric;
+        return `
+          <div class="stat ${isPrimary?'highlight':''}">
+            <div class="k">${meta.label}</div>
+            <div class="v ${val<0?'neg':''}">${fmtByFormat(val, meta.format)}</div>
+          </div>`;
+      }).join('')}
     </div>`;
 }
 
@@ -664,7 +871,10 @@ function buildTableData(){
   const baseColIdx = colVals.reduce((best,val,idx)=>
     Math.abs(val-state.inputs[state.axes.colVar]) < Math.abs(colVals[best]-state.inputs[state.axes.colVar]) ? idx : best, 0);
 
-  return { rowInput, colInput, rowVals, colVals, cells, min, max, baseRowIdx, baseColIdx };
+  const rowInRange = valueInRange(state.inputs[state.axes.rowVar], state.axes.rowRange);
+  const colInRange = valueInRange(state.inputs[state.axes.colVar], state.axes.colRange);
+
+  return { rowInput, colInput, rowVals, colVals, cells, min, max, baseRowIdx, baseColIdx, rowInRange, colInRange };
 }
 
 function tableHTML(){
@@ -706,6 +916,7 @@ function renderTableView(container){
     <h2 class="panel-title">Two-way sensitivity table</h2>
     <p class="panel-sub">Pick any two assumptions to vary against each other. Everything else stays at the base case shown in the sidebar.</p>
     ${tableControlsHTML()}
+    <div id="range-warning-holder"></div>
     <div id="table-holder"></div>
     <div class="legend">
       <span class="swatch"><span class="box" style="background:${mixColor(0,RED_RGB,GREEN_RGB)}"></span> Weaker</span>
@@ -720,6 +931,30 @@ function renderTableView(container){
   const built = tableHTML();
   holder.innerHTML = built.html;
 
+  const warnHolder = container.querySelector('#range-warning-holder');
+  const rowOff = !built.data.rowInRange, colOff = !built.data.colInRange;
+  if(rowOff || colOff){
+    const which = rowOff && colOff ? 'both axis ranges' : (rowOff ? 'the row range' : 'the column range');
+    warnHolder.innerHTML = `
+      <div class="range-warning">
+        <span>⚠ Your sidebar base case falls outside ${which} shown below — the ● marker sits at the nearest edge, not the true base case.</span>
+        <button class="btn" id="fit-range-btn">Fit range to base case</button>
+      </div>`;
+    warnHolder.querySelector('#fit-range-btn').addEventListener('click', ()=>{
+      if(rowOff){
+        const v = state.inputs[state.axes.rowVar];
+        state.axes.rowRange.min = Math.min(state.axes.rowRange.min, v);
+        state.axes.rowRange.max = Math.max(state.axes.rowRange.max, v);
+      }
+      if(colOff){
+        const v = state.inputs[state.axes.colVar];
+        state.axes.colRange.min = Math.min(state.axes.colRange.min, v);
+        state.axes.colRange.max = Math.max(state.axes.colRange.max, v);
+      }
+      renderMain();
+    });
+  }
+
   // control listeners
   container.querySelector('#ctl-metric').addEventListener('change', e=>{
     state.metric = e.target.value; renderMain();
@@ -727,7 +962,6 @@ function renderTableView(container){
   container.querySelector('#ctl-rowvar').addEventListener('change', e=>{
     const key = e.target.value;
     if(key===state.axes.colVar){
-      // swap to avoid duplicate axis
       state.axes.colVar = state.axes.rowVar;
       state.axes.colRange = state.axes.rowRange;
     }
@@ -749,6 +983,9 @@ function renderTableView(container){
     const prop = ['min','max','step'][idx];
     container.querySelector('#ctl-'+id).addEventListener('change', e=>{
       state.axes.rowRange[prop] = parseFloat(e.target.value)||0;
+      if(state.axes.rowRange.min > state.axes.rowRange.max){
+        const t = state.axes.rowRange.min; state.axes.rowRange.min = state.axes.rowRange.max; state.axes.rowRange.max = t;
+      }
       renderMain();
     });
   });
@@ -756,6 +993,9 @@ function renderTableView(container){
     const prop = ['min','max','step'][idx];
     container.querySelector('#ctl-'+id).addEventListener('change', e=>{
       state.axes.colRange[prop] = parseFloat(e.target.value)||0;
+      if(state.axes.colRange.min > state.axes.colRange.max){
+        const t = state.axes.colRange.min; state.axes.colRange.min = state.axes.colRange.max; state.axes.colRange.max = t;
+      }
       renderMain();
     });
   });
@@ -811,6 +1051,7 @@ function renderTornadoView(container){
     const segHighFav = r.mHigh >= base;
     const segLowLeft = Math.min(pLow, basePct), segLowWidth = Math.abs(pLow-basePct);
     const segHighLeft = Math.min(pHigh, basePct), segHighWidth = Math.abs(pHigh-basePct);
+    const tagsClose = Math.abs(pHigh-pLow) < 9;
     return `
       <div class="tornado-row">
         <div class="tornado-label">${r.inp.label}</div>
@@ -819,7 +1060,7 @@ function renderTornadoView(container){
           <div class="bar-seg ${segLowFav?'fav':'unfav'}" style="left:${segLowLeft}%; width:${segLowWidth}%"></div>
           <div class="bar-seg ${segHighFav?'fav':'unfav'}" style="left:${segHighLeft}%; width:${segHighWidth}%"></div>
           <div class="bar-tag" style="left:${pLow}%">${axisLabel(r.inp.range.min, r.inp)}</div>
-          <div class="bar-tag" style="left:${pHigh}%">${axisLabel(r.inp.range.max, r.inp)}</div>
+          <div class="bar-tag ${tagsClose?'stacked':''}" style="left:${pHigh}%">${axisLabel(r.inp.range.max, r.inp)}</div>
         </div>
       </div>`;
   }).join('');
