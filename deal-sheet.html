@@ -651,12 +651,12 @@ const INPUTS = [
   { key:'valueOfProperty', label:'Value of property', group:'Purchase', format:'currency', default:270000, step:5000, min:0, range:{min:150000,max:400000,step:25000} },
   { key:'valueOfLand', label:'Value of land', group:'Purchase', format:'currency', default:50000, step:5000, min:0, range:{min:0,max:100000,step:10000} },
   // Financing
-  { key:'mortgageAmount1', label:'1st mortgage amount', group:'Financing', format:'currency', default:150000, step:5000, min:0, range:{min:0,max:300000,step:25000} },
-  { key:'interestRate1', label:'1st interest rate', group:'Financing', format:'percent', default:5, step:0.125, min:0, range:{min:3,max:9,step:0.5} },
-  { key:'mortgageLength1', label:'1st mortgage length', group:'Financing', format:'years', default:30, step:5, min:5, max:40, range:{min:15,max:40,step:5} },
-  { key:'mortgageAmount2', label:'2nd mortgage amount', group:'Financing', format:'currency', default:0, step:5000, min:0, range:{min:0,max:100000,step:25000} },
-  { key:'interestRate2', label:'2nd interest rate', group:'Financing', format:'percent', default:0, step:0.125, min:0, range:{min:0,max:9,step:1} },
-  { key:'mortgageLength2', label:'2nd mortgage length', group:'Financing', format:'years', default:30, step:5, min:5, max:40, range:{min:15,max:40,step:5} },
+  { key:'mortgageAmount1', label:'Mortgage amount', group:'Financing', format:'currency', default:150000, step:5000, min:0, range:{min:0,max:300000,step:25000} },
+  { key:'interestRate1', label:'Interest rate', group:'Financing', format:'percent', default:5, step:0.125, min:0, range:{min:3,max:9,step:0.5} },
+  { key:'mortgageLength1', label:'Mortgage length', group:'Financing', format:'years', default:30, step:5, min:5, max:40, range:{min:15,max:40,step:5} },
+  { key:'mortgageAmount2', label:'2nd mortgage amount', group:'Financing', format:'currency', default:0, step:5000, min:0, range:{min:0,max:100000,step:25000}, secondMortgage:true },
+  { key:'interestRate2', label:'2nd interest rate', group:'Financing', format:'percent', default:0, step:0.125, min:0, range:{min:0,max:9,step:1}, secondMortgage:true },
+  { key:'mortgageLength2', label:'2nd mortgage length', group:'Financing', format:'years', default:30, step:5, min:5, max:40, range:{min:15,max:40,step:5}, secondMortgage:true },
   // Income
   { key:'grossMonthlyRents', label:'Gross monthly rents', group:'Income', format:'currency', default:1500, step:50, min:0, range:{min:1000,max:2500,step:250} },
   { key:'vacancyPct', label:'Vacancy allowance', group:'Income', format:'percent', default:10, step:1, min:0, max:100, range:{min:0,max:20,step:5} },
@@ -697,6 +697,7 @@ const state = {
   metric: 'year1CashOnCash',
   view: 'table',
   spiderMode: 'single',
+  hasSecondMortgage: false,
   axes: {
     rowVar:'interestRate1', colVar:'grossMonthlyRents',
     rowRange: {...INPUTS.find(i=>i.key==='interestRate1').range},
@@ -748,6 +749,7 @@ function mixColor(t, a, b){
 const RED_RGB=[241,214,205], GREEN_RGB=[215,231,204];
 
 function inputByKey(k){ return INPUTS.find(i=>i.key===k); }
+function activeInputs(){ return INPUTS.filter(i=> !i.secondMortgage || state.hasSecondMortgage); }
 function valueInRange(val, r){
   const lo = Math.min(r.min, r.max), hi = Math.max(r.min, r.max);
   return val >= lo - 1e-9 && val <= hi + 1e-9;
@@ -764,6 +766,7 @@ function renderSidebar(){
   groups.forEach(g=>{
     html += `<div class="field-group"><div class="field-group-label">${g}</div>`;
     INPUTS.filter(i=>i.group===g).forEach(inp=>{
+      if(inp.secondMortgage && !state.hasSecondMortgage) return;
       const badge = unitBadge(inp);
       html += `
         <div class="field">
@@ -774,11 +777,40 @@ function renderSidebar(){
             ${badge.suffix? `<span>${badge.suffix}</span>`:''}
           </div>
         </div>`;
+      if(g==='Financing' && inp.key==='mortgageLength1'){
+        html += `
+        <div class="field">
+          <label for="chk-second-mortgage">Add a second mortgage</label>
+          <input type="checkbox" id="chk-second-mortgage" ${state.hasSecondMortgage?'checked':''} style="accent-color:var(--brass-light); width:16px; height:16px;">
+        </div>`;
+      }
     });
     html += `</div>`;
   });
 
   sidebar.innerHTML = html;
+
+  const secondMortgageChk = sidebar.querySelector('#chk-second-mortgage');
+  if(secondMortgageChk){
+    secondMortgageChk.addEventListener('change', e=>{
+      state.hasSecondMortgage = e.target.checked;
+      if(!state.hasSecondMortgage){
+        const defaults = { mortgageAmount2:0, interestRate2:0, mortgageLength2:30 };
+        Object.assign(state.inputs, defaults);
+        if(state.axes.rowVar==='mortgageAmount2'||state.axes.rowVar==='interestRate2'||state.axes.rowVar==='mortgageLength2'){
+          state.axes.rowVar = 'interestRate1';
+          state.axes.rowRange = {...inputByKey('interestRate1').range};
+        }
+        if(state.axes.colVar==='mortgageAmount2'||state.axes.colVar==='interestRate2'||state.axes.colVar==='mortgageLength2'){
+          state.axes.colVar = 'grossMonthlyRents';
+          state.axes.colRange = {...inputByKey('grossMonthlyRents').range};
+        }
+      }
+      renderSidebar();
+      renderMain();
+    });
+  }
+
   sidebar.querySelectorAll('input[data-key]').forEach(el=>{
     el.addEventListener('input', e=>{
       const k = e.target.dataset.key;
@@ -828,9 +860,9 @@ function tableControlsHTML(){
   const metricOptions = Object.entries(METRICS).map(([k,v])=>
     `<option value="${k}" ${state.metric===k?'selected':''}>${v.label}</option>`).join('');
 
-  const rowOptions = INPUTS.map(i=>
+  const rowOptions = activeInputs().map(i=>
     `<option value="${i.key}" ${state.axes.rowVar===i.key?'selected':''}>${i.label}</option>`).join('');
-  const colOptions = INPUTS.map(i=>
+  const colOptions = activeInputs().map(i=>
     `<option value="${i.key}" ${state.axes.colVar===i.key?'selected':''}>${i.label}</option>`).join('');
 
   const rr = state.axes.rowRange, cr = state.axes.colRange;
@@ -1042,7 +1074,7 @@ function renderTornadoView(container){
   const metricMeta = METRICS[state.metric];
   const base = computeMetrics(state.inputs)[state.metric];
 
-  const rows = INPUTS.map(inp=>{
+  const rows = activeInputs().map(inp=>{
     const vLow = {...state.inputs, [inp.key]: inp.range.min};
     const vHigh = {...state.inputs, [inp.key]: inp.range.max};
     const mLow = computeMetrics(vLow)[state.metric];
@@ -1124,7 +1156,7 @@ function computeMetricRanges(baseInputs){
   const baseMetrics = computeMetrics(baseInputs);
   Object.keys(METRICS).forEach(k=>{
     let vals = [baseMetrics[k]];
-    INPUTS.forEach(inp=>{
+    activeInputs().forEach(inp=>{
       const vLow = {...baseInputs, [inp.key]: inp.range.min};
       const vHigh = {...baseInputs, [inp.key]: inp.range.max};
       vals.push(computeMetrics(vLow)[k], computeMetrics(vHigh)[k]);
@@ -1146,7 +1178,7 @@ function normalize01(val, key, ranges){
  * whichever of its low/high endpoints most helps `metricKey`. */
 function extremeScenario(baseInputs, metricKey, favorable){
   const out = {...baseInputs};
-  INPUTS.forEach(inp=>{
+  activeInputs().forEach(inp=>{
     const vLow = {...baseInputs, [inp.key]: inp.range.min};
     const vHigh = {...baseInputs, [inp.key]: inp.range.max};
     const mLow = computeMetrics(vLow)[metricKey];
