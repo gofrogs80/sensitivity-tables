@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sensitivity Tables. — Stress-test any deal</title>
+<title>Sensitivity Tables. — Stress-test any decision</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -36,13 +36,13 @@
     min-height:100vh;
   }
   .shell{
-    max-width:1000px;
+    max-width:1160px;
     margin:0 auto;
-    padding:64px 20px 80px;
+    padding:56px 20px 80px;
   }
   .masthead{
     color:var(--paper);
-    padding:6px 6px 40px;
+    padding:6px 6px 32px;
     text-align:center;
   }
   .eyebrow{
@@ -56,21 +56,82 @@
   .masthead h1{
     font-family:var(--font-display);
     font-weight:600;
-    font-size:clamp(40px,6.4vw,68px);
+    font-size:clamp(38px,6vw,60px);
     margin:0 0 14px;
     letter-spacing:-0.01em;
   }
   .masthead p{
     margin:0 auto;
     color:var(--muted-light);
-    font-size:16px;
+    font-size:15.5px;
     max-width:520px;
     line-height:1.6;
   }
+
+  /* ---------- SEARCH ---------- */
+  .search-wrap{
+    max-width:480px;
+    margin:0 auto 44px;
+  }
+  .search-box{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:rgba(0,0,0,.28);
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:8px;
+    padding:11px 14px;
+  }
+  .search-box.focus-ring:focus-within{
+    border-color:var(--brass-light);
+  }
+  .search-box svg{ flex:0 0 auto; opacity:.6; }
+  .search-box input{
+    flex:1;
+    background:transparent;
+    border:none;
+    outline:none;
+    color:var(--paper);
+    font-family:var(--font-body);
+    font-size:14px;
+  }
+  .search-box input::placeholder{ color:var(--muted-light); }
+  .search-count{
+    text-align:center;
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--muted-light);
+    margin-top:8px;
+    letter-spacing:.04em;
+  }
+
+  /* ---------- CATEGORY SECTIONS ---------- */
+  .category{ margin-bottom:40px; }
+  .category-head{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    margin-bottom:16px;
+    padding-bottom:8px;
+    border-bottom:1px solid rgba(228,192,119,.2);
+  }
+  .category-head h2{
+    font-family:var(--font-display);
+    font-size:19px;
+    color:var(--paper);
+    margin:0;
+    font-weight:500;
+  }
+  .category-head .count{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--brass-light);
+  }
+
   .tools{
     display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-    gap:18px;
+    grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+    gap:16px;
   }
   .tool-card{
     display:block;
@@ -78,7 +139,7 @@
     border:1px solid var(--paper-rule);
     border-top:3px solid var(--ledger);
     border-radius:10px;
-    padding:26px 24px;
+    padding:22px 22px 20px;
     text-decoration:none;
     color:var(--text);
     box-shadow:0 20px 40px -24px rgba(0,0,0,.5);
@@ -88,32 +149,62 @@
     transform:translateY(-2px);
     border-top-color:var(--brass);
   }
+  .tool-card.soon{
+    cursor:default;
+    opacity:.62;
+  }
+  .tool-card.soon:hover{ transform:none; border-top-color:var(--ledger); }
+  .tool-card .tag-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:10px;
+  }
   .tool-card .tag{
     font-family:var(--font-mono);
     font-size:10px;
     letter-spacing:.1em;
     text-transform:uppercase;
     color:var(--muted);
-    margin-bottom:10px;
   }
-  .tool-card h2{
+  .tool-card .badge-soon{
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--brass);
+    border:1px solid var(--brass);
+    border-radius:20px;
+    padding:2px 8px;
+  }
+  .tool-card h3{
     font-family:var(--font-display);
-    font-size:24px;
-    margin:0 0 8px;
+    font-size:21px;
+    margin:0 0 7px;
   }
   .tool-card p{
-    font-size:13.5px;
+    font-size:13px;
     color:var(--muted);
-    line-height:1.55;
-    margin:0 0 16px;
+    line-height:1.5;
+    margin:0 0 14px;
   }
   .tool-card .cta{
     font-family:var(--font-mono);
-    font-size:12px;
+    font-size:11.5px;
     font-weight:600;
     color:var(--ledger-deep);
   }
   .tool-card .cta::after{ content:' →'; }
+  .tool-card.soon .cta{ color:var(--muted); }
+  .tool-card.soon .cta::after{ content:''; }
+
+  .empty-state{
+    text-align:center;
+    color:var(--muted-light);
+    font-size:14px;
+    padding:40px 0;
+  }
+
   .footer{
     text-align:center;
     margin-top:56px;
@@ -127,21 +218,149 @@
 <body>
 <div class="shell">
   <div class="masthead">
-    <p class="eyebrow">Rental Property Underwriting</p>
+    <p class="eyebrow">Underwriting & Decision Tools</p>
     <h1>Sensitivity Tables.</h1>
-    <p>Stress-test any deal before you sign it. Set your assumptions once, then see exactly how the numbers move.</p>
+    <p>Stress-test any decision before you commit to it. Set your assumptions once, then see exactly how the numbers move.</p>
   </div>
 
-  <div class="tools">
-    <a class="tool-card" href="deal-sheet.html">
-      <div class="tag">Underwriting tool</div>
-      <h2>Deal Sheet.</h2>
-      <p>Build a two-way sensitivity table on any two inputs, or rank every assumption by how much it swings cash flow, cash-on-cash return, cap rate, or NOI.</p>
-      <div class="cta">Open the tool</div>
-    </a>
+  <div class="search-wrap">
+    <div class="search-box focus-ring">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="search" placeholder="Search tools — e.g. rental, business, retirement…" autocomplete="off">
+    </div>
+    <div class="search-count" id="search-count"></div>
   </div>
+
+  <div id="catalog"></div>
 
   <div class="footer">sensitivitytables.com</div>
 </div>
+
+<script>
+/* ---------------- TOOL CATALOG ----------------
+   Add new tools here. `status:'live'` cards link out; `status:'soon'` cards
+   render as non-interactive placeholders in the right category. */
+
+const TOOLS = [
+  {
+    key:'deal-sheet',
+    title:'Deal Sheet.',
+    tag:'Rental property',
+    desc:'Build a two-way sensitivity table on any two inputs, or rank every assumption by how much it swings cash flow, cash-on-cash return, cap rate, or NOI.',
+    href:'deal-sheet.html',
+    category:'Real Estate',
+    status:'live',
+    tags:['rental','cash flow','cap rate','cash-on-cash','mortgage','tornado']
+  },
+  {
+    key:'house-flip',
+    title:'Flip Margin.',
+    tag:'Fix & flip',
+    desc:'Stress-test ARV, rehab budget, and holding costs to see how thin your flip margin gets under pressure.',
+    category:'Real Estate',
+    status:'soon',
+    tags:['flip','arv','rehab','renovation']
+  },
+  {
+    key:'startup-runway',
+    title:'Runway.',
+    tag:'Startup finance',
+    desc:'Vary burn rate, growth rate, and fundraise timing to see how many months of runway you actually have.',
+    category:'Business',
+    status:'soon',
+    tags:['startup','burn rate','runway','fundraising']
+  },
+  {
+    key:'saas-unit-econ',
+    title:'Unit Economics.',
+    tag:'SaaS',
+    desc:'Flex CAC, churn, and ARPU together to see which lever moves LTV:CAC the most.',
+    category:'Business',
+    status:'soon',
+    tags:['saas','cac','churn','ltv','arpu']
+  },
+  {
+    key:'retirement',
+    title:'Retirement Draw.',
+    tag:'Retirement planning',
+    desc:'Test withdrawal rate, market return, and inflation assumptions against how long your portfolio lasts.',
+    category:'Personal Finance',
+    status:'soon',
+    tags:['retirement','withdrawal rate','portfolio','inflation']
+  },
+  {
+    key:'loan-payoff',
+    title:'Payoff Timeline.',
+    tag:'Debt payoff',
+    desc:'See how extra payments, rate changes, and term length move your loan payoff date and total interest.',
+    category:'Personal Finance',
+    status:'soon',
+    tags:['loan','debt','interest','payoff']
+  },
+];
+
+const CATEGORY_ORDER = ['Real Estate','Business','Personal Finance'];
+
+/* ---------------- RENDER ---------------- */
+
+function cardHTML(t){
+  if(t.status==='live'){
+    return `
+      <a class="tool-card" href="${t.href}">
+        <div class="tag-row"><span class="tag">${t.tag}</span></div>
+        <h3>${t.title}</h3>
+        <p>${t.desc}</p>
+        <div class="cta">Open the tool</div>
+      </a>`;
+  }
+  return `
+    <div class="tool-card soon">
+      <div class="tag-row"><span class="tag">${t.tag}</span><span class="badge-soon">Coming soon</span></div>
+      <h3>${t.title}</h3>
+      <p>${t.desc}</p>
+      <div class="cta"></div>
+    </div>`;
+}
+
+function matches(t, q){
+  if(!q) return true;
+  const hay = [t.title, t.tag, t.desc, t.category, ...(t.tags||[])].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+function render(){
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const catalog = document.getElementById('catalog');
+  const countEl = document.getElementById('search-count');
+
+  const filtered = TOOLS.filter(t=>matches(t,q));
+
+  if(filtered.length===0){
+    catalog.innerHTML = `<div class="empty-state">No tools match “${q}” yet.</div>`;
+    countEl.textContent = '';
+    return;
+  }
+
+  countEl.textContent = q ? `${filtered.length} of ${TOOLS.length} tools` : '';
+
+  let html = '';
+  CATEGORY_ORDER.forEach(cat=>{
+    const items = filtered.filter(t=>t.category===cat);
+    if(items.length===0) return;
+    html += `
+      <div class="category">
+        <div class="category-head">
+          <h2>${cat}</h2>
+          <span class="count">${items.length} tool${items.length===1?'':'s'}</span>
+        </div>
+        <div class="tools">${items.map(cardHTML).join('')}</div>
+      </div>`;
+  });
+  catalog.innerHTML = html;
+}
+
+document.getElementById('search').addEventListener('input', render);
+render();
+</script>
 </body>
 </html>
