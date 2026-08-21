@@ -155,6 +155,43 @@
   .field-input input::-webkit-outer-spin-button,
   .field-input input::-webkit-inner-spin-button{ opacity:0.4; }
 
+  .add-second-mortgage-btn{
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    width:100%;
+    margin:2px 0 16px;
+    background:transparent;
+    border:1px dashed rgba(228,192,119,.4);
+    border-radius:6px;
+    color:var(--brass-light);
+    font-family:var(--font-body);
+    font-size:12.5px;
+    font-weight:600;
+    padding:9px 12px;
+    cursor:pointer;
+  }
+  .add-second-mortgage-btn:hover{
+    border-color:var(--brass-light);
+    background:rgba(228,192,119,.08);
+  }
+  .remove-second-mortgage-btn{
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    width:100%;
+    margin:2px 0 16px;
+    background:transparent;
+    border:1px solid rgba(154,58,44,.4);
+    border-radius:6px;
+    color:#D99B8C;
+    font-family:var(--font-body);
+    font-size:11.5px;
+    font-weight:600;
+    padding:6px 10px;
+    cursor:pointer;
+  }
+  .remove-second-mortgage-btn:hover{
+    border-color:#D99B8C;
+    background:rgba(154,58,44,.12);
+  }
+
   /* ---------- MAIN ---------- */
   .main{
     flex:1;
@@ -1058,11 +1095,9 @@ function renderSidebar(){
           </div>
         </div>`;
       if(g==='Financing' && inp.key==='mortgageLength1'){
-        html += `
-        <div class="field">
-          <label for="chk-second-mortgage">Add a second mortgage</label>
-          <input type="checkbox" id="chk-second-mortgage" ${state.hasSecondMortgage?'checked':''} style="accent-color:var(--brass-light); width:16px; height:16px;">
-        </div>`;
+        html += state.hasSecondMortgage
+          ? `<button type="button" class="remove-second-mortgage-btn" id="btn-second-mortgage">− Remove second mortgage</button>`
+          : `<button type="button" class="add-second-mortgage-btn" id="btn-second-mortgage">+ Add a second mortgage</button>`;
       }
     });
     html += `</div>`;
@@ -1070,10 +1105,10 @@ function renderSidebar(){
 
   sidebar.innerHTML = html;
 
-  const secondMortgageChk = sidebar.querySelector('#chk-second-mortgage');
-  if(secondMortgageChk){
-    secondMortgageChk.addEventListener('change', e=>{
-      state.hasSecondMortgage = e.target.checked;
+  const secondMortgageBtn = sidebar.querySelector('#btn-second-mortgage');
+  if(secondMortgageBtn){
+    secondMortgageBtn.addEventListener('click', ()=>{
+      state.hasSecondMortgage = !state.hasSecondMortgage;
       if(!state.hasSecondMortgage){
         const defaults = { mortgageAmount2:0, interestRate2:0, mortgageLength2:30 };
         Object.assign(state.inputs, defaults);
