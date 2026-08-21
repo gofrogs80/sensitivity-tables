@@ -1273,7 +1273,7 @@ function tableHTML(){
   const fmtAxis = (val, inp, badge) => `${badge.prefix}${inp.format==='currency'? Math.round(val).toLocaleString('en-US') : val}${badge.suffix}`;
 
   let thead = `<thead>
-    <tr class="axis-label"><th class="corner" rowspan="2">${metricMeta.label}</th><th colspan="${d.colVals.length}">Column: ${d.colInput.label}</th></tr>
+    <tr class="axis-label"><th class="corner" rowspan="2">${metricMeta.label}</th><th colspan="${d.colVals.length+1}">Column: ${d.colInput.label}</th></tr>
     <tr><th>Row: ${d.rowInput.label} ▾</th>${d.colVals.map(cv=>`<th>${fmtAxis(cv,d.colInput,colBadge)}</th>`).join('')}</tr>
   </thead>`;
 
