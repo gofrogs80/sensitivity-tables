@@ -336,10 +336,11 @@
     justify-content:center;
     background:var(--ledger-deep);
     color:var(--brass-light);
-    font-family:var(--font-body);
+    font-family:var(--font-mono);
     font-weight:600;
     font-size:11px;
-    letter-spacing:.04em;
+    letter-spacing:.06em;
+    text-transform:uppercase;
     padding:10px 7px;
     border-radius:8px;
     white-space:nowrap;
@@ -371,6 +372,7 @@
   }
   table.sens thead tr.axis-label th{
     background:var(--ledger-deep);
+    color:var(--brass-light);
     font-size:11px;
     letter-spacing:.06em;
     text-transform:uppercase;
@@ -383,7 +385,7 @@
   }
   table.sens .corner{
     background:var(--ledger-deep) !important;
-    color:var(--brass-light) !important;
+    color:#F4F7EE !important;
     font-family:var(--font-body);
     font-weight:600;
     text-align:left;
@@ -1327,7 +1329,7 @@ function tableHTML(){
 
   return {
     html: `<div class="table-axis-wrap">
-      <div class="y-axis-label">${d.rowInput.label}</div>
+      <div class="y-axis-label">Row: ${d.rowInput.label}</div>
       <div class="table-wrap"><table class="sens">${thead}${tbody}</table></div>
     </div>`,
     data: d,
