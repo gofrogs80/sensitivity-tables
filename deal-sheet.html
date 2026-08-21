@@ -1587,7 +1587,14 @@ function buildRadarSVG(series, axisMetaList, size){
     return `<polygon points="${pts}" fill="${s.color}" fill-opacity="0.16" stroke="${s.color}" stroke-width="2"${dash}/>${dots}`;
   }).join('');
 
-  return `<svg viewBox="0 0 ${size} ${size}" width="100%" style="max-width:${size}px; display:block;">
+  // Label text extends past the R*1.26 anchor point (long labels like
+  // "Year 1 Equity Build-Up" or "NPV of Cash Flows" can run ~90px past it),
+  // and an <svg> clips anything outside its viewBox by default — so the
+  // viewBox needs real padding around the 0..size plot area, not just a
+  // wider rendered width, or side labels get cut off mid-word.
+  const pad = size*0.3;
+  const vb = size + pad*2;
+  return `<svg viewBox="${-pad} ${-pad} ${vb} ${vb}" width="100%" style="max-width:${vb}px; display:block;">
     ${gridPolys}${axisLines}${seriesSVG}${labels}
   </svg>`;
 }
