@@ -1881,12 +1881,21 @@ function openRangesModal(){
 }
 
 function renderRangesModal(){
-  let el = document.getElementById('ranges-backdrop');
-  if(el) el.remove();
+  const old = document.getElementById('ranges-backdrop');
+  // Every checkbox/select change tears down and rebuilds the whole modal,
+  // which would otherwise reset its scrollable body back to the top each
+  // time — capture scroll position before removing, restore it after.
+  const oldBody = old ? old.querySelector('.modal-body') : null;
+  const savedBodyScroll = oldBody ? oldBody.scrollTop : 0;
+  const savedBackdropScroll = old ? old.scrollTop : 0;
+  if(old) old.remove();
   if(!state.rangesModalOpen) return;
 
   document.body.insertAdjacentHTML('beforeend', rangesModalHTML());
   const backdrop = document.getElementById('ranges-backdrop');
+  backdrop.scrollTop = savedBackdropScroll;
+  const newBody = backdrop.querySelector('.modal-body');
+  if(newBody) newBody.scrollTop = savedBodyScroll;
 
   backdrop.addEventListener('click', e=>{
     if(e.target===backdrop){ state.rangesModalOpen=false; renderRangesModal(); }
