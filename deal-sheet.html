@@ -910,6 +910,7 @@ const state = {
   spiderMode: 'single',
   hasSecondMortgage: false,
   rangesModalOpen: false,
+  bulkApplyUndoSnapshot: null, // full rangeConfig from right before the last "Apply to included fields" click
   // Per-input sensitivity range config. 'manual' uses fixed min/max/step;
   // 'percent' recomputes min/max as ±N% of the input's *current* sidebar
   // value every render, so the range always tracks the base case.
@@ -1837,6 +1838,7 @@ function rangesModalHTML(){
             <span>±</span><input type="number" id="bulk-pct" value="20" min="0" max="100">
             <span>%</span>
             <button class="btn" id="bulk-apply">Apply to included fields</button>
+            ${state.bulkApplyUndoSnapshot ? `<button class="btn" id="bulk-undo">↩ Undo bulk apply</button>` : ''}
           </div>
           ${rowsHTML}
         </div>
@@ -1867,11 +1869,20 @@ function renderRangesModal(){
   const bulkPctEl = document.getElementById('bulk-pct');
   enterAdvancesFocus(bulkPctEl);
   document.getElementById('bulk-apply').addEventListener('click', ()=>{
+    state.bulkApplyUndoSnapshot = JSON.parse(JSON.stringify(state.rangeConfig));
     const pct = Math.max(0, parseFloat(bulkPctEl.value)||0);
     activeInputs().forEach(inp=>{
       const cfg = state.rangeConfig[inp.key];
       if(cfg.includeInTornado){ cfg.mode='percent'; cfg.percent=pct; }
     });
+    renderRangesModal();
+    renderMain();
+  });
+  const bulkUndoEl = document.getElementById('bulk-undo');
+  if(bulkUndoEl) bulkUndoEl.addEventListener('click', ()=>{
+    state.rangeConfig = state.bulkApplyUndoSnapshot;
+    state.bulkApplyUndoSnapshot = null;
+    ensureAxesValid();
     renderRangesModal();
     renderMain();
   });
