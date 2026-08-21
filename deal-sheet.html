@@ -325,7 +325,7 @@
   .table-axis-wrap{
     display:flex;
     align-items:stretch;
-    gap:8px;
+    gap:0;
   }
   .y-axis-label{
     flex:0 0 auto;
@@ -342,7 +342,7 @@
     letter-spacing:.06em;
     text-transform:uppercase;
     padding:10px 7px;
-    border-radius:8px;
+    border-radius:0;
     white-space:nowrap;
   }
   .table-wrap{
@@ -351,6 +351,9 @@
     overflow-x:auto;
     border:1px solid var(--paper-rule);
     border-radius:8px;
+    border-top-left-radius:0;
+    border-bottom-left-radius:0;
+    border-left:none;
     background:#F8FAF4;
   }
   table.sens{
@@ -376,6 +379,9 @@
     font-size:11px;
     letter-spacing:.06em;
     text-transform:uppercase;
+  }
+  table.sens thead tr.axis-label th.axis-title{
+    text-align:center;
   }
   table.sens tbody th{
     background:var(--ledger);
@@ -1304,7 +1310,7 @@ function tableHTML(){
   // header row's own cells were landing one column to the right of tbody's,
   // orphaning the last data column with no header above it.
   let thead = `<thead>
-    <tr class="axis-label"><th class="corner">${metricMeta.label}</th><th colspan="${d.colVals.length}">Column: ${d.colInput.label}</th></tr>
+    <tr class="axis-label"><th class="corner">${metricMeta.label}</th><th colspan="${d.colVals.length}" class="axis-title">${d.colInput.label}</th></tr>
     <tr><th class="corner"></th>${d.colVals.map(cv=>`<th>${fmtAxis(cv,d.colInput,colBadge)}</th>`).join('')}</tr>
   </thead>`;
 
@@ -1329,7 +1335,7 @@ function tableHTML(){
 
   return {
     html: `<div class="table-axis-wrap">
-      <div class="y-axis-label">Row: ${d.rowInput.label}</div>
+      <div class="y-axis-label">${d.rowInput.label}</div>
       <div class="table-wrap"><table class="sens">${thead}${tbody}</table></div>
     </div>`,
     data: d,
