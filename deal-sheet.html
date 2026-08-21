@@ -492,6 +492,80 @@
     margin-bottom:10px;
   }
 
+  /* ---------- RANGES MODAL ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0;
+    background:rgba(16,27,20,.6);
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px;
+    z-index:100;
+    overflow-y:auto;
+  }
+  .modal-panel{
+    background:var(--paper);
+    border-radius:10px;
+    max-width:920px;
+    width:100%;
+    box-shadow:0 40px 80px -20px rgba(0,0,0,.6);
+  }
+  .modal-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 22px;
+    border-bottom:1px solid var(--paper-rule);
+  }
+  .modal-header h2{
+    font-family:var(--font-display);
+    font-size:19px;
+    margin:0;
+  }
+  .modal-close{
+    font-family:var(--font-body);
+    font-size:13px;
+    font-weight:600;
+    background:none;
+    border:1px solid var(--paper-rule);
+    border-radius:6px;
+    padding:6px 12px;
+    cursor:pointer;
+    color:var(--muted);
+  }
+  .modal-close:hover{ border-color:var(--ledger); color:var(--text); }
+  .modal-body{ padding:16px 22px 22px; max-height:70vh; overflow-y:auto; }
+  .modal-sub{ font-size:12.5px; color:var(--muted); margin:0 0 16px; line-height:1.5; }
+  .ranges-group-label{
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:18px 0 8px;
+  }
+  .ranges-group-label:first-child{ margin-top:0; }
+  .ranges-row{
+    display:grid;
+    grid-template-columns:22px 1fr 90px 1fr;
+    align-items:center;
+    gap:12px;
+    padding:8px 0;
+    border-bottom:1px solid var(--paper-rule);
+  }
+  .ranges-row input[type=checkbox]{ accent-color:var(--ledger); width:16px; height:16px; }
+  .ranges-row .r-label{ font-size:12.5px; color:var(--text); }
+  .ranges-row select{
+    font-family:var(--font-body); font-size:12px;
+    border:1px solid var(--paper-rule); border-radius:5px;
+    padding:5px 6px; background:#fff; color:var(--text);
+  }
+  .ranges-row .r-fields{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .ranges-row .r-fields input{
+    width:78px; font-family:var(--font-mono); font-size:12px;
+    border:1px solid var(--paper-rule); border-radius:5px; padding:5px 6px;
+  }
+  .ranges-row .r-fields input.pct{ width:56px; }
+  .ranges-row .r-fields .sep{ font-size:11px; color:var(--muted); }
+  .ranges-row .r-preview{ font-size:11px; color:var(--muted); font-family:var(--font-mono); }
+  .ranges-row.excluded{ opacity:.5; }
+
   /* ---------- SPIDER CHART ---------- */
   .radar-card{
     background:#F8FAF4;
@@ -781,10 +855,19 @@ const state = {
   view: 'table',
   spiderMode: 'single',
   hasSecondMortgage: false,
+  rangesModalOpen: false,
+  // Per-input sensitivity range config. 'manual' uses fixed min/max/step;
+  // 'percent' recomputes min/max as ±N% of the input's *current* sidebar
+  // value every render, so the range always tracks the base case.
+  rangeConfig: Object.fromEntries(INPUTS.map(i=>[i.key, {
+    mode: 'manual',
+    manualMin: i.range.min, manualMax: i.range.max, manualStep: i.range.step,
+    percent: 20,
+    includeInTornado: true,
+  }])),
   axes: {
     rowVar:'interestRate1', colVar:'grossMonthlyRents',
-    rowRange: {...INPUTS.find(i=>i.key==='interestRate1').range},
-    colRange: {...INPUTS.find(i=>i.key==='grossMonthlyRents').range},
+    rowRange: null, colRange: null, // set below, once effectiveRange() is available
   }
 };
 
@@ -833,10 +916,44 @@ const RED_RGB=[241,214,205], GREEN_RGB=[215,231,204];
 
 function inputByKey(k){ return INPUTS.find(i=>i.key===k); }
 function activeInputs(){ return INPUTS.filter(i=> !i.secondMortgage || state.hasSecondMortgage); }
+/** Inputs eligible for sensitivity sweeps right now: active (2nd mortgage
+ * toggle respected) AND not excluded via the Ranges panel. */
+function sensitizableInputs(){ return activeInputs().filter(i=>state.rangeConfig[i.key].includeInTornado); }
 function valueInRange(val, r){
   const lo = Math.min(r.min, r.max), hi = Math.max(r.min, r.max);
   return val >= lo - 1e-9 && val <= hi + 1e-9;
 }
+/** The min/max/step this input sweeps across right now, per its Ranges
+ * panel config. 'percent' mode recomputes ±N% of the *current* sidebar
+ * value every call, so it always tracks the base case. */
+function effectiveRange(inp){
+  const cfg = state.rangeConfig[inp.key];
+  if(cfg.mode==='percent'){
+    const v = state.inputs[inp.key];
+    const p = Math.max(0, cfg.percent)/100;
+    let min = v*(1-p), max = v*(1+p);
+    if(min>max){ const t=min; min=max; max=t; }
+    const step = (max-min)/6 || (inp.step||1);
+    return { min, max, step };
+  }
+  return { min: cfg.manualMin, max: cfg.manualMax, step: cfg.manualStep };
+}
+/** Reset any axis pointed at a now-ineligible input back to a safe default. */
+function ensureAxesValid(){
+  const valid = sensitizableInputs().map(i=>i.key);
+  if(valid.length===0) return;
+  if(!valid.includes(state.axes.rowVar)){
+    state.axes.rowVar = valid[0];
+    state.axes.rowRange = effectiveRange(inputByKey(state.axes.rowVar));
+  }
+  if(!valid.includes(state.axes.colVar) || state.axes.colVar===state.axes.rowVar){
+    state.axes.colVar = valid.find(k=>k!==state.axes.rowVar) || valid[0];
+    state.axes.colRange = effectiveRange(inputByKey(state.axes.colVar));
+  }
+}
+
+state.axes.rowRange = effectiveRange(inputByKey(state.axes.rowVar));
+state.axes.colRange = effectiveRange(inputByKey(state.axes.colVar));
 
 /* ---------------- SIDEBAR ---------------- */
 
@@ -880,15 +997,8 @@ function renderSidebar(){
       if(!state.hasSecondMortgage){
         const defaults = { mortgageAmount2:0, interestRate2:0, mortgageLength2:30 };
         Object.assign(state.inputs, defaults);
-        if(state.axes.rowVar==='mortgageAmount2'||state.axes.rowVar==='interestRate2'||state.axes.rowVar==='mortgageLength2'){
-          state.axes.rowVar = 'interestRate1';
-          state.axes.rowRange = {...inputByKey('interestRate1').range};
-        }
-        if(state.axes.colVar==='mortgageAmount2'||state.axes.colVar==='interestRate2'||state.axes.colVar==='mortgageLength2'){
-          state.axes.colVar = 'grossMonthlyRents';
-          state.axes.colRange = {...inputByKey('grossMonthlyRents').range};
-        }
       }
+      ensureAxesValid();
       renderSidebar();
       renderMain();
     });
@@ -943,9 +1053,9 @@ function tableControlsHTML(){
   const metricOptions = Object.entries(METRICS).map(([k,v])=>
     `<option value="${k}" ${state.metric===k?'selected':''}>${v.label}</option>`).join('');
 
-  const rowOptions = activeInputs().map(i=>
+  const rowOptions = sensitizableInputs().map(i=>
     `<option value="${i.key}" ${state.axes.rowVar===i.key?'selected':''}>${i.label}</option>`).join('');
-  const colOptions = activeInputs().map(i=>
+  const colOptions = sensitizableInputs().map(i=>
     `<option value="${i.key}" ${state.axes.colVar===i.key?'selected':''}>${i.label}</option>`).join('');
 
   const rr = state.axes.rowRange, cr = state.axes.colRange;
@@ -1044,6 +1154,11 @@ function tableHTML(){
 }
 
 function renderTableView(container){
+  if(sensitizableInputs().length===0){
+    container.innerHTML = `<h2 class="panel-title">Two-way sensitivity table</h2>
+      <p class="panel-sub">No variables are enabled for sensitivity. Open <strong>Ranges</strong> and check "Include" on at least two inputs.</p>`;
+    return;
+  }
   container.innerHTML = `
     <h2 class="panel-title">Two-way sensitivity table</h2>
     <p class="panel-sub">Pick any two assumptions to vary against each other. Everything else stays at the base case shown in the sidebar.</p>
@@ -1098,7 +1213,7 @@ function renderTableView(container){
       state.axes.colRange = state.axes.rowRange;
     }
     state.axes.rowVar = key;
-    state.axes.rowRange = {...inputByKey(key).range};
+    state.axes.rowRange = effectiveRange(inputByKey(key));
     renderMain();
   });
   container.querySelector('#ctl-colvar').addEventListener('change', e=>{
@@ -1108,7 +1223,7 @@ function renderTableView(container){
       state.axes.rowRange = state.axes.colRange;
     }
     state.axes.colVar = key;
-    state.axes.colRange = {...inputByKey(key).range};
+    state.axes.colRange = effectiveRange(inputByKey(key));
     renderMain();
   });
   ['row-min','row-max','row-step'].forEach((id,idx)=>{
@@ -1154,15 +1269,21 @@ function renderTableView(container){
 /* ---------------- TORNADO VIEW ---------------- */
 
 function renderTornadoView(container){
+  if(sensitizableInputs().length===0){
+    container.innerHTML = `<h2 class="panel-title">Tornado — every input, ranked</h2>
+      <p class="panel-sub">No variables are enabled for sensitivity. Open <strong>Ranges</strong> and check "Include" on at least one input.</p>`;
+    return;
+  }
   const metricMeta = METRICS[state.metric];
   const base = computeMetrics(state.inputs)[state.metric];
 
-  const rows = activeInputs().map(inp=>{
-    const vLow = {...state.inputs, [inp.key]: inp.range.min};
-    const vHigh = {...state.inputs, [inp.key]: inp.range.max};
+  const rows = sensitizableInputs().map(inp=>{
+    const r = effectiveRange(inp);
+    const vLow = {...state.inputs, [inp.key]: r.min};
+    const vHigh = {...state.inputs, [inp.key]: r.max};
     const mLow = computeMetrics(vLow)[state.metric];
     const mHigh = computeMetrics(vHigh)[state.metric];
-    return { inp, mLow, mHigh, span: Math.abs(mHigh-mLow) };
+    return { inp, r, mLow, mHigh, span: Math.abs(mHigh-mLow) };
   }).sort((a,b)=> b.span - a.span);
 
   const allVals = rows.flatMap(r=>[r.mLow, r.mHigh]).concat([base]).filter(isFinite);
@@ -1191,8 +1312,8 @@ function renderTornadoView(container){
           <div class="bar-baseline" style="left:${basePct}%"></div>
           <div class="bar-seg ${segLowFav?'fav':'unfav'}" style="left:${segLowLeft}%; width:${segLowWidth}%"></div>
           <div class="bar-seg ${segHighFav?'fav':'unfav'}" style="left:${segHighLeft}%; width:${segHighWidth}%"></div>
-          <div class="bar-tag" style="left:${pLow}%">${axisLabel(r.inp.range.min, r.inp)}</div>
-          <div class="bar-tag ${tagsClose?'stacked':''}" style="left:${pHigh}%">${axisLabel(r.inp.range.max, r.inp)}</div>
+          <div class="bar-tag" style="left:${pLow}%">${axisLabel(r.r.min, r.inp)}</div>
+          <div class="bar-tag ${tagsClose?'stacked':''}" style="left:${pHigh}%">${axisLabel(r.r.max, r.inp)}</div>
         </div>
       </div>`;
   }).join('');
@@ -1239,9 +1360,10 @@ function computeMetricRanges(baseInputs){
   const baseMetrics = computeMetrics(baseInputs);
   Object.keys(METRICS).forEach(k=>{
     let vals = [baseMetrics[k]];
-    activeInputs().forEach(inp=>{
-      const vLow = {...baseInputs, [inp.key]: inp.range.min};
-      const vHigh = {...baseInputs, [inp.key]: inp.range.max};
+    sensitizableInputs().forEach(inp=>{
+      const r = effectiveRange(inp);
+      const vLow = {...baseInputs, [inp.key]: r.min};
+      const vHigh = {...baseInputs, [inp.key]: r.max};
       vals.push(computeMetrics(vLow)[k], computeMetrics(vHigh)[k]);
     });
     vals = vals.filter(isFinite);
@@ -1261,16 +1383,17 @@ function normalize01(val, key, ranges){
  * whichever of its low/high endpoints most helps `metricKey`. */
 function extremeScenario(baseInputs, metricKey, favorable){
   const out = {...baseInputs};
-  activeInputs().forEach(inp=>{
-    const vLow = {...baseInputs, [inp.key]: inp.range.min};
-    const vHigh = {...baseInputs, [inp.key]: inp.range.max};
+  sensitizableInputs().forEach(inp=>{
+    const r = effectiveRange(inp);
+    const vLow = {...baseInputs, [inp.key]: r.min};
+    const vHigh = {...baseInputs, [inp.key]: r.max};
     const mLow = computeMetrics(vLow)[metricKey];
     const mHigh = computeMetrics(vHigh)[metricKey];
     if(!isFinite(mLow) || !isFinite(mHigh) || mLow===mHigh){ return; }
     const lowIsBetter = mLow > mHigh;
     out[inp.key] = favorable
-      ? (lowIsBetter ? inp.range.min : inp.range.max)
-      : (lowIsBetter ? inp.range.max : inp.range.min);
+      ? (lowIsBetter ? r.min : r.max)
+      : (lowIsBetter ? r.max : r.min);
   });
   return out;
 }
@@ -1484,6 +1607,10 @@ function buildStatementRows(inp, res){
       formula:t=>`IRR on initial equity (${fmtCurrency(res.initialEquity)}), Cash Flow Before Tax through Year ${t}, then before-tax sale proceeds one period later.` },
     { label:'After Tax IRR', fmt:'pct', getValue:t=>irrIfSoldInYear(t,inp,res,true),
       formula:t=>`Same as Before Tax IRR, using Cash Flow After Tax and after-tax sale proceeds net of recapture + capital gains tax.` },
+
+    { kind:'group', label:'Equity' },
+    { label:'Equity', fmt:'usd', getValue:t=>y(t).propertyValue-y(t).loanBalance,
+      formula:t=>`Property Value (${fmtCurrency(y(t).propertyValue)}) − Loan Balance (${fmtCurrency(y(t).loanBalance)}) = ${fmtCurrency(y(t).propertyValue-y(t).loanBalance)}` },
   ];
 }
 
@@ -1528,6 +1655,107 @@ function renderStatementView(container){
 
 /* ---------------- MAIN RENDER ---------------- */
 
+/* ---------------- RANGES MODAL ---------------- */
+
+function rangesModalHTML(){
+  const groups = ['Purchase','Financing','Income','Annual Expenses','Disposition'];
+  let rowsHTML = '';
+  groups.forEach(g=>{
+    const items = INPUTS.filter(i=>i.group===g && (!i.secondMortgage || state.hasSecondMortgage));
+    if(items.length===0) return;
+    rowsHTML += `<div class="ranges-group-label">${g}</div>`;
+    items.forEach(inp=>{
+      const cfg = state.rangeConfig[inp.key];
+      const badge = unitBadge(inp);
+      const r = effectiveRange(inp);
+      const previewFmt = v => `${badge.prefix}${inp.format==='currency'? Math.round(v).toLocaleString('en-US') : (Math.round(v*100)/100)}${badge.suffix}`;
+      rowsHTML += `
+        <div class="ranges-row ${cfg.includeInTornado?'':'excluded'}" data-key="${inp.key}">
+          <input type="checkbox" class="r-include" ${cfg.includeInTornado?'checked':''} title="Include in tornado &amp; two-way table">
+          <div class="r-label">${inp.label}</div>
+          <select class="r-mode">
+            <option value="manual" ${cfg.mode==='manual'?'selected':''}>Manual</option>
+            <option value="percent" ${cfg.mode==='percent'?'selected':''}>%</option>
+          </select>
+          ${cfg.mode==='manual' ? `
+            <div class="r-fields">
+              <input type="number" class="r-min" value="${cfg.manualMin}"> <span class="sep">to</span>
+              <input type="number" class="r-max" value="${cfg.manualMax}"> <span class="sep">step</span>
+              <input type="number" class="r-step" value="${cfg.manualStep}">
+            </div>` : `
+            <div class="r-fields">
+              <span class="sep">±</span><input type="number" class="r-pct pct" value="${cfg.percent}" min="0" max="100"><span class="sep">%  →</span>
+              <span class="r-preview">${previewFmt(r.min)} – ${previewFmt(r.max)}</span>
+            </div>`}
+        </div>`;
+    });
+  });
+
+  return `
+    <div class="modal-backdrop" id="ranges-backdrop">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2>Sensitivity ranges</h2>
+          <button class="modal-close" id="ranges-close">Close</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-sub">Choose which inputs feed the Tornado chart and Two-Way Table axis dropdowns, and how each one's low/high is set — a fixed manual range, or ±% of whatever's currently in the sidebar (recalculates live as you edit assumptions).</p>
+          ${rowsHTML}
+        </div>
+      </div>
+    </div>`;
+}
+
+function openRangesModal(){
+  state.rangesModalOpen = true;
+  renderRangesModal();
+}
+
+function renderRangesModal(){
+  let el = document.getElementById('ranges-backdrop');
+  if(el) el.remove();
+  if(!state.rangesModalOpen) return;
+
+  document.body.insertAdjacentHTML('beforeend', rangesModalHTML());
+  const backdrop = document.getElementById('ranges-backdrop');
+
+  backdrop.addEventListener('click', e=>{
+    if(e.target===backdrop){ state.rangesModalOpen=false; renderRangesModal(); }
+  });
+  document.getElementById('ranges-close').addEventListener('click', ()=>{
+    state.rangesModalOpen=false; renderRangesModal();
+  });
+
+  backdrop.querySelectorAll('.ranges-row').forEach(row=>{
+    const key = row.dataset.key;
+    const cfg = state.rangeConfig[key];
+
+    row.querySelector('.r-include').addEventListener('change', e=>{
+      cfg.includeInTornado = e.target.checked;
+      ensureAxesValid();
+      renderRangesModal();
+      renderMain();
+    });
+    row.querySelector('.r-mode').addEventListener('change', e=>{
+      cfg.mode = e.target.value;
+      renderRangesModal();
+      renderMain();
+    });
+    const minEl = row.querySelector('.r-min'), maxEl = row.querySelector('.r-max'), stepEl = row.querySelector('.r-step');
+    if(minEl) minEl.addEventListener('change', e=>{ cfg.manualMin = parseFloat(e.target.value)||0; renderMain(); });
+    if(maxEl) maxEl.addEventListener('change', e=>{ cfg.manualMax = parseFloat(e.target.value)||0; renderMain(); });
+    if(stepEl) stepEl.addEventListener('change', e=>{ cfg.manualStep = parseFloat(e.target.value)||1; renderMain(); });
+    const pctEl = row.querySelector('.r-pct');
+    if(pctEl) pctEl.addEventListener('input', e=>{
+      cfg.percent = Math.max(0, parseFloat(e.target.value)||0);
+      renderRangesModal();
+      renderMain();
+    });
+  });
+}
+
+/* ---------------- MAIN RENDER ---------------- */
+
 function renderMain(){
   const main = document.getElementById('main');
   main.innerHTML = `
@@ -1538,18 +1766,22 @@ function renderMain(){
       <button id="sw-spider" class="${state.view==='spider'?'active':''}">Spider Chart</button>
       <button id="sw-statement" class="${state.view==='statement'?'active':''}">Pro Forma Statement</button>
     </div>
+    <button class="btn" id="open-ranges" style="margin:0 0 22px;">⚙ Ranges</button>
     <div id="view-holder"></div>
   `;
   main.querySelector('#sw-table').addEventListener('click', ()=>{ state.view='table'; renderMain(); });
   main.querySelector('#sw-tornado').addEventListener('click', ()=>{ state.view='tornado'; renderMain(); });
   main.querySelector('#sw-spider').addEventListener('click', ()=>{ state.view='spider'; renderMain(); });
   main.querySelector('#sw-statement').addEventListener('click', ()=>{ state.view='statement'; renderMain(); });
+  main.querySelector('#open-ranges').addEventListener('click', openRangesModal);
 
   const holder = main.querySelector('#view-holder');
   if(state.view==='table') renderTableView(holder);
   else if(state.view==='tornado') renderTornadoView(holder);
   else if(state.view==='statement') renderStatementView(holder);
   else renderSpiderView(holder);
+
+  renderRangesModal();
 }
 
 renderSidebar();
