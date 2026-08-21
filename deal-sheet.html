@@ -565,6 +565,23 @@
   .ranges-row .r-fields .sep{ font-size:11px; color:var(--muted); }
   .ranges-row .r-preview{ font-size:11px; color:var(--muted); font-family:var(--font-mono); }
   .ranges-row.excluded{ opacity:.5; }
+  .ranges-bulk{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    background:#F8FAF4;
+    border:1px solid var(--paper-rule);
+    border-radius:7px;
+    padding:10px 12px;
+    margin-bottom:18px;
+    font-size:12.5px;
+    color:var(--text);
+  }
+  .ranges-bulk input{
+    width:56px; font-family:var(--font-mono); font-size:12px;
+    border:1px solid var(--paper-rule); border-radius:5px; padding:5px 6px;
+  }
 
   /* ---------- SPIDER CHART ---------- */
   .radar-card{
@@ -914,6 +931,65 @@ function mixColor(t, a, b){
 }
 const RED_RGB=[241,214,205], GREEN_RGB=[215,231,204];
 
+/** Waits `wait`ms after the last call before actually running `fn` — used so
+ * a full recompute+re-render doesn't fire on every single keystroke. */
+function debounce(fn, wait){
+  let t;
+  const debounced = (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); };
+  debounced.cancel = ()=>clearTimeout(t);
+  return debounced;
+}
+const debouncedRenderMain = debounce(()=>renderMain(), 150);
+
+/** Enter on a number field moves focus forward, same as Tab, instead of
+ * doing nothing (there's no <form> here to submit). */
+function focusNextField(current){
+  const all = Array.from(document.querySelectorAll('input[type=number], input[type=checkbox], select'));
+  const idx = all.indexOf(current);
+  if(idx>-1 && idx<all.length-1) all[idx+1].focus();
+  else current.blur();
+}
+function enterAdvancesFocus(el){
+  el.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ e.preventDefault(); focusNextField(e.target); }
+  });
+}
+
+/* ---- Live thousands-separator formatting for currency fields ----
+   Native <input type=number> can't contain commas and doesn't support the
+   selection API at all (browsers throw on selectionStart/setSelectionRange),
+   so currency fields are rendered as type=text and reformatted by hand on
+   every keystroke, re-deriving the cursor position from "how many digits
+   were to its left" rather than a fixed character offset — that's what
+   keeps the cursor from jumping when a comma is inserted or removed. */
+function formatThousands(rawDigits){
+  if(rawDigits==='') return '';
+  const trimmed = rawDigits.replace(/^0+(?=\d)/, '');
+  return trimmed.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+/** Reformats a currency <input> in place, preserving cursor position by
+ * digit count rather than character index. Returns the parsed numeric value. */
+function reformatCurrencyInput(el){
+  const oldCursor = el.selectionStart==null ? el.value.length : el.selectionStart;
+  const digitsBeforeCursor = el.value.slice(0, oldCursor).replace(/[^0-9]/g,'').length;
+  const rawDigits = el.value.replace(/[^0-9]/g,'');
+  const formatted = formatThousands(rawDigits);
+  el.value = formatted;
+  let count = 0, pos = formatted.length;
+  if(digitsBeforeCursor===0){
+    pos = 0;
+  } else {
+    for(let i=0;i<formatted.length;i++){
+      if(/[0-9]/.test(formatted[i])){
+        count++;
+        if(count===digitsBeforeCursor){ pos = i+1; break; }
+      }
+    }
+  }
+  el.setSelectionRange(pos, pos);
+  return rawDigits==='' ? NaN : parseInt(rawDigits, 10);
+}
+
 function inputByKey(k){ return INPUTS.find(i=>i.key===k); }
 function activeInputs(){ return INPUTS.filter(i=> !i.secondMortgage || state.hasSecondMortgage); }
 /** Inputs eligible for sensitivity sweeps right now: active (2nd mortgage
@@ -968,12 +1044,16 @@ function renderSidebar(){
     INPUTS.filter(i=>i.group===g).forEach(inp=>{
       if(inp.secondMortgage && !state.hasSecondMortgage) return;
       const badge = unitBadge(inp);
+      const isCurrency = inp.format==='currency';
+      const inputAttrs = isCurrency
+        ? `type="text" inputmode="numeric" value="${formatThousands(String(Math.round(state.inputs[inp.key])))}"`
+        : `type="number" step="${inp.step}" ${inp.min!=null?`min="${inp.min}"`:''} ${inp.max!=null?`max="${inp.max}"`:''} value="${state.inputs[inp.key]}"`;
       html += `
         <div class="field">
           <label for="inp-${inp.key}">${inp.label}</label>
           <div class="field-input focus-ring">
             ${badge.prefix? `<span>${badge.prefix}</span>`:''}
-            <input id="inp-${inp.key}" type="number" step="${inp.step}" ${inp.min!=null?`min="${inp.min}"`:''} ${inp.max!=null?`max="${inp.max}"`:''} value="${state.inputs[inp.key]}" data-key="${inp.key}">
+            <input id="inp-${inp.key}" ${inputAttrs} data-key="${inp.key}">
             ${badge.suffix? `<span>${badge.suffix}</span>`:''}
           </div>
         </div>`;
@@ -1005,25 +1085,36 @@ function renderSidebar(){
   }
 
   sidebar.querySelectorAll('input[data-key]').forEach(el=>{
+    el.addEventListener('focus', e=>e.target.select());
+    enterAdvancesFocus(el);
+    const inp = inputByKey(el.dataset.key);
+    const isCurrency = inp.format==='currency';
     el.addEventListener('input', e=>{
       const k = e.target.dataset.key;
-      const inp = inputByKey(k);
-      let val = parseFloat(e.target.value);
+      let val = isCurrency ? reformatCurrencyInput(e.target) : parseFloat(e.target.value);
       if(isNaN(val)) val = 0;
       const outOfBounds = (inp.min!=null && val<inp.min) || (inp.max!=null && val>inp.max);
       e.target.closest('.field-input').classList.toggle('invalid', outOfBounds);
       state.inputs[k] = val;
-      renderMain();
+      debouncedRenderMain();
     });
     el.addEventListener('blur', e=>{
       const k = e.target.dataset.key;
-      const inp = inputByKey(k);
       let val = state.inputs[k];
       if(inp.min!=null) val = Math.max(inp.min, val);
       if(inp.max!=null) val = Math.min(inp.max, val);
       state.inputs[k] = val;
-      e.target.value = val;
+      // Only touch .value when clamping actually changed it — reassigning it
+      // unconditionally clears the browser's native undo/redo history for
+      // this field even when nothing needed correcting.
+      if(isCurrency){
+        const formatted = formatThousands(String(Math.round(val)));
+        if(e.target.value!==formatted) e.target.value = formatted;
+      } else if(parseFloat(e.target.value)!==val){
+        e.target.value = val;
+      }
       e.target.closest('.field-input').classList.remove('invalid');
+      debouncedRenderMain.cancel();
       renderMain();
     });
   });
@@ -1228,7 +1319,10 @@ function renderTableView(container){
   });
   ['row-min','row-max','row-step'].forEach((id,idx)=>{
     const prop = ['min','max','step'][idx];
-    container.querySelector('#ctl-'+id).addEventListener('change', e=>{
+    const f = container.querySelector('#ctl-'+id);
+    f.addEventListener('focus', e=>e.target.select());
+    enterAdvancesFocus(f);
+    f.addEventListener('change', e=>{
       state.axes.rowRange[prop] = parseFloat(e.target.value)||0;
       if(state.axes.rowRange.min > state.axes.rowRange.max){
         const t = state.axes.rowRange.min; state.axes.rowRange.min = state.axes.rowRange.max; state.axes.rowRange.max = t;
@@ -1238,7 +1332,10 @@ function renderTableView(container){
   });
   ['col-min','col-max','col-step'].forEach((id,idx)=>{
     const prop = ['min','max','step'][idx];
-    container.querySelector('#ctl-'+id).addEventListener('change', e=>{
+    const f = container.querySelector('#ctl-'+id);
+    f.addEventListener('focus', e=>e.target.select());
+    enterAdvancesFocus(f);
+    f.addEventListener('change', e=>{
       state.axes.colRange[prop] = parseFloat(e.target.value)||0;
       if(state.axes.colRange.min > state.axes.colRange.max){
         const t = state.axes.colRange.min; state.axes.colRange.min = state.axes.colRange.max; state.axes.colRange.max = t;
@@ -1700,6 +1797,12 @@ function rangesModalHTML(){
         </div>
         <div class="modal-body">
           <p class="modal-sub">Choose which inputs feed the Tornado chart and Two-Way Table axis dropdowns, and how each one's low/high is set — a fixed manual range, or ±% of whatever's currently in the sidebar (recalculates live as you edit assumptions).</p>
+          <div class="ranges-bulk">
+            <span>Set every <strong>included</strong> field to</span>
+            <span>±</span><input type="number" id="bulk-pct" value="20" min="0" max="100">
+            <span>%</span>
+            <button class="btn" id="bulk-apply">Apply to included fields</button>
+          </div>
           ${rowsHTML}
         </div>
       </div>
@@ -1726,6 +1829,18 @@ function renderRangesModal(){
     state.rangesModalOpen=false; renderRangesModal();
   });
 
+  const bulkPctEl = document.getElementById('bulk-pct');
+  enterAdvancesFocus(bulkPctEl);
+  document.getElementById('bulk-apply').addEventListener('click', ()=>{
+    const pct = Math.max(0, parseFloat(bulkPctEl.value)||0);
+    activeInputs().forEach(inp=>{
+      const cfg = state.rangeConfig[inp.key];
+      if(cfg.includeInTornado){ cfg.mode='percent'; cfg.percent=pct; }
+    });
+    renderRangesModal();
+    renderMain();
+  });
+
   backdrop.querySelectorAll('.ranges-row').forEach(row=>{
     const key = row.dataset.key;
     const cfg = state.rangeConfig[key];
@@ -1742,11 +1857,14 @@ function renderRangesModal(){
       renderMain();
     });
     const minEl = row.querySelector('.r-min'), maxEl = row.querySelector('.r-max'), stepEl = row.querySelector('.r-step');
+    [minEl,maxEl,stepEl].forEach(f=>{ if(f){ f.addEventListener('focus', e=>e.target.select()); enterAdvancesFocus(f); } });
     if(minEl) minEl.addEventListener('change', e=>{ cfg.manualMin = parseFloat(e.target.value)||0; renderMain(); });
     if(maxEl) maxEl.addEventListener('change', e=>{ cfg.manualMax = parseFloat(e.target.value)||0; renderMain(); });
     if(stepEl) stepEl.addEventListener('change', e=>{ cfg.manualStep = parseFloat(e.target.value)||1; renderMain(); });
     const pctEl = row.querySelector('.r-pct');
     if(pctEl){
+      pctEl.addEventListener('focus', e=>e.target.select());
+      enterAdvancesFocus(pctEl);
       const inp = inputByKey(key);
       const badge = unitBadge(inp);
       const previewFmt = v => `${badge.prefix}${inp.format==='currency'? Math.round(v).toLocaleString('en-US') : (Math.round(v*100)/100)}${badge.suffix}`;
