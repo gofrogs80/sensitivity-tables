@@ -413,22 +413,33 @@
 
   /* ---------- TORNADO ---------- */
   .tornado-metric{ margin-bottom:18px; }
-  .tornado-chart{ background:#F8FAF4; border:1px solid var(--paper-rule); border-radius:8px; padding:30px 22px 8px; }
+  .tornado-chart{ background:#F8FAF4; border:1px solid var(--paper-rule); border-radius:8px; padding:20px 22px 8px; }
   .tornado-row{
     display:grid;
-    grid-template-columns:180px 1fr;
+    grid-template-columns:170px min-content 1fr min-content;
+    grid-template-areas:"label low bar high";
     align-items:center;
-    gap:14px;
+    gap:8px 12px;
     padding:9px 0;
     border-bottom:1px solid var(--paper-rule);
   }
   .tornado-row:last-child{ border-bottom:none; }
   .tornado-label{
+    grid-area:label;
     font-size:12px;
     font-weight:600;
     color:var(--text);
   }
+  .tornado-val{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--muted);
+    white-space:nowrap;
+  }
+  .tornado-val.low{ grid-area:low; text-align:right; }
+  .tornado-val.high{ grid-area:high; text-align:left; }
   .bar-area{
+    grid-area:bar;
     position:relative;
     height:22px;
   }
@@ -447,16 +458,6 @@
   }
   .bar-seg.fav{ background:var(--ledger); }
   .bar-seg.unfav{ background:var(--red); opacity:.82; }
-  .bar-tag{
-    position:absolute;
-    top:-16px;
-    transform:translateX(-50%);
-    font-family:var(--font-mono);
-    font-size:10px;
-    color:var(--muted);
-    white-space:nowrap;
-  }
-  .bar-tag.stacked{ top:-29px; }
   .tornado-foot{
     display:flex;
     justify-content:space-between;
@@ -464,6 +465,21 @@
     font-size:10.5px;
     color:var(--muted);
     padding:10px 0 4px;
+  }
+  .tornado-foot.top{ padding:4px 0 14px; border-bottom:1px solid var(--paper-rule); margin-bottom:8px; }
+
+  /* Below this width, flanking value labels no longer have room next to the
+     bar — stack the row label on its own line, then low-value/bar/high-value
+     beneath it. */
+  @media (max-width:640px){
+    .tornado-row{
+      grid-template-columns:min-content 1fr min-content;
+      grid-template-areas:
+        "label label label"
+        "low bar high";
+      row-gap:4px;
+    }
+    .tornado-val{ font-size:10px; }
   }
 
   /* ---------- PRO FORMA STATEMENT ---------- */
@@ -640,7 +656,6 @@
     .app{ flex-direction:column; }
     .sidebar{ width:100%; flex:none; max-height:none; }
     .summary-strip{ grid-template-columns:repeat(2,1fr); }
-    .tornado-row{ grid-template-columns:130px 1fr; }
   }
 </style>
 </head>
@@ -1437,19 +1452,25 @@ function renderTornadoView(container){
     const segHighFav = r.mHigh >= base;
     const segLowLeft = Math.min(pLow, basePct), segLowWidth = Math.abs(pLow-basePct);
     const segHighLeft = Math.min(pHigh, basePct), segHighWidth = Math.abs(pHigh-basePct);
-    const tagsClose = Math.abs(pHigh-pLow) < 9;
     return `
       <div class="tornado-row">
         <div class="tornado-label">${r.inp.label}</div>
+        <div class="tornado-val low">${axisLabel(r.r.min, r.inp)}</div>
         <div class="bar-area">
           <div class="bar-baseline" style="left:${basePct}%"></div>
           <div class="bar-seg ${segLowFav?'fav':'unfav'}" style="left:${segLowLeft}%; width:${segLowWidth}%"></div>
           <div class="bar-seg ${segHighFav?'fav':'unfav'}" style="left:${segHighLeft}%; width:${segHighWidth}%"></div>
-          <div class="bar-tag" style="left:${pLow}%">${axisLabel(r.r.min, r.inp)}</div>
-          <div class="bar-tag ${tagsClose?'stacked':''}" style="left:${pHigh}%">${axisLabel(r.r.max, r.inp)}</div>
         </div>
+        <div class="tornado-val high">${axisLabel(r.r.max, r.inp)}</div>
       </div>`;
   }).join('');
+
+  const footHTML = (extraClass)=>`
+    <div class="tornado-foot ${extraClass||''}">
+      <span>${fmtByFormat(xMin, metricMeta.format)}</span>
+      <span>Base case: ${fmtByFormat(base, metricMeta.format)}</span>
+      <span>${fmtByFormat(xMax, metricMeta.format)}</span>
+    </div>`;
 
   container.innerHTML = `
     <h2 class="panel-title">Tornado — every input, ranked</h2>
@@ -1461,12 +1482,9 @@ function renderTornadoView(container){
       </select>
     </div>
     <div class="tornado-chart" style="margin-top:26px;">
+      ${footHTML('top')}
       ${rowsHTML}
-      <div class="tornado-foot">
-        <span>${fmtByFormat(xMin, metricMeta.format)}</span>
-        <span>Base case: ${fmtByFormat(base, metricMeta.format)}</span>
-        <span>${fmtByFormat(xMax, metricMeta.format)}</span>
-      </div>
+      ${footHTML()}
     </div>
     <div class="legend" style="margin-top:14px;">
       <span class="swatch"><span class="box" style="background:var(--ledger)"></span> Improves the metric</span>
