@@ -416,7 +416,11 @@
   .tornado-chart{ background:#F8FAF4; border:1px solid var(--paper-rule); border-radius:8px; padding:20px 22px 8px; }
   .tornado-row{
     display:grid;
-    grid-template-columns:170px min-content 1fr min-content;
+    /* Fixed-width value columns (not min-content) so the bar column's pixel
+       width — and therefore the baseline's left:X% position — lines up
+       identically across every row, regardless of how wide that row's
+       particular low/high text happens to be (e.g. "$400,000" vs "89.7%"). */
+    grid-template-columns:170px 74px 1fr 74px;
     grid-template-areas:"label low bar high";
     align-items:center;
     gap:8px 12px;
@@ -473,7 +477,7 @@
      beneath it. */
   @media (max-width:640px){
     .tornado-row{
-      grid-template-columns:min-content 1fr min-content;
+      grid-template-columns:60px 1fr 60px;
       grid-template-areas:
         "label label label"
         "low bar high";
