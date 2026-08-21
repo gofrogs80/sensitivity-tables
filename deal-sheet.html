@@ -1746,11 +1746,22 @@ function renderRangesModal(){
     if(maxEl) maxEl.addEventListener('change', e=>{ cfg.manualMax = parseFloat(e.target.value)||0; renderMain(); });
     if(stepEl) stepEl.addEventListener('change', e=>{ cfg.manualStep = parseFloat(e.target.value)||1; renderMain(); });
     const pctEl = row.querySelector('.r-pct');
-    if(pctEl) pctEl.addEventListener('input', e=>{
-      cfg.percent = Math.max(0, parseFloat(e.target.value)||0);
-      renderRangesModal();
-      renderMain();
-    });
+    if(pctEl){
+      const inp = inputByKey(key);
+      const badge = unitBadge(inp);
+      const previewFmt = v => `${badge.prefix}${inp.format==='currency'? Math.round(v).toLocaleString('en-US') : (Math.round(v*100)/100)}${badge.suffix}`;
+      // Live-patch just the preview text while typing — rebuilding the whole
+      // modal (renderRangesModal/renderMain) on every keystroke would destroy
+      // and recreate this input mid-type, dropping focus after one character.
+      pctEl.addEventListener('input', e=>{
+        cfg.percent = Math.max(0, parseFloat(e.target.value)||0);
+        const r = effectiveRange(inp);
+        const previewEl = row.querySelector('.r-preview');
+        if(previewEl) previewEl.textContent = `${previewFmt(r.min)} – ${previewFmt(r.max)}`;
+      });
+      // Full recompute (main view + modal) once the user's done editing.
+      pctEl.addEventListener('change', ()=>{ renderRangesModal(); renderMain(); });
+    }
   });
 }
 
