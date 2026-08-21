@@ -322,7 +322,31 @@
   .range-warning .btn{ flex:0 0 auto; }
 
   /* ---------- TABLE ---------- */
+  .table-axis-wrap{
+    display:flex;
+    align-items:stretch;
+    gap:8px;
+  }
+  .y-axis-label{
+    flex:0 0 auto;
+    writing-mode:vertical-rl;
+    transform:rotate(180deg);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--ledger-deep);
+    color:var(--brass-light);
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:11px;
+    letter-spacing:.04em;
+    padding:10px 7px;
+    border-radius:8px;
+    white-space:nowrap;
+  }
   .table-wrap{
+    flex:1;
+    min-width:0;
     overflow-x:auto;
     border:1px solid var(--paper-rule);
     border-radius:8px;
@@ -1272,9 +1296,14 @@ function tableHTML(){
 
   const fmtAxis = (val, inp, badge) => `${badge.prefix}${inp.format==='currency'? Math.round(val).toLocaleString('en-US') : val}${badge.suffix}`;
 
+  // Two independent corner cells (no rowspan) — a rowspan'd corner claims
+  // its column in BOTH header rows, but tbody rows start fresh each time
+  // (rowspan doesn't carry across the thead/tbody boundary), so the second
+  // header row's own cells were landing one column to the right of tbody's,
+  // orphaning the last data column with no header above it.
   let thead = `<thead>
-    <tr class="axis-label"><th class="corner" rowspan="2">${metricMeta.label}</th><th colspan="${d.colVals.length+1}">Column: ${d.colInput.label}</th></tr>
-    <tr><th>Row: ${d.rowInput.label} ▾</th>${d.colVals.map(cv=>`<th>${fmtAxis(cv,d.colInput,colBadge)}</th>`).join('')}</tr>
+    <tr class="axis-label"><th class="corner">${metricMeta.label}</th><th colspan="${d.colVals.length}">Column: ${d.colInput.label}</th></tr>
+    <tr><th class="corner"></th>${d.colVals.map(cv=>`<th>${fmtAxis(cv,d.colInput,colBadge)}</th>`).join('')}</tr>
   </thead>`;
 
   let tbody = '<tbody>';
@@ -1296,7 +1325,13 @@ function tableHTML(){
   });
   tbody += '</tbody>';
 
-  return { html: `<div class="table-wrap"><table class="sens">${thead}${tbody}</table></div>`, data: d };
+  return {
+    html: `<div class="table-axis-wrap">
+      <div class="y-axis-label">${d.rowInput.label}</div>
+      <div class="table-wrap"><table class="sens">${thead}${tbody}</table></div>
+    </div>`,
+    data: d,
+  };
 }
 
 function renderTableView(container){
