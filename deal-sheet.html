@@ -639,7 +639,11 @@ function calcRealEstate(inp){
     const interest = m1.perYear[t-1].interest + m2.perYear[t-1].interest;
     const principal = m1.perYear[t-1].principal + m2.perYear[t-1].principal;
     const loanBalance = m1.perYear[t-1].balance + m2.perYear[t-1].balance;
-    const debtService = m1.annualPayment + m2.annualPayment;
+    // Debt service is the actual interest + principal paid this year, which
+    // falls to zero once the loan is retired (not the constant scheduled
+    // payment, which would subtract phantom payments after payoff whenever
+    // the loan term is shorter than the hold horizon).
+    const debtService = interest + principal;
 
     const depreciation = t<=depYearsFull ? annualDepreciation
       : (depYearsFrac>0 && t===depYearsFull+1 ? annualDepreciation*depYearsFrac : 0);
@@ -664,7 +668,9 @@ function calcRealEstate(inp){
     const saleExpenses = salePrice*(inp.expensesOnSalePct/100);
     const accumulatedDepreciation = Math.min(depreciableBasis, annualDepreciation*Math.min(t, inp.depreciationYears));
     const recaptureTax = accumulatedDepreciation*(inp.marginalTaxPct/100);
-    const capitalGainTax = Math.max(0, salePrice-inp.purchasePrice)*(inp.longTermCapGainsPct/100);
+    // Cost basis includes acquisition expenses; depreciation is handled
+    // separately as recapture, so it isn't subtracted from basis here.
+    const capitalGainTax = Math.max(0, salePrice-inp.purchasePrice-inp.acquisitionExpenses)*(inp.longTermCapGainsPct/100);
     const beforeTax = salePrice-saleExpenses-y.loanBalance;
     const afterTax = beforeTax-recaptureTax-capitalGainTax;
     return { salePrice, saleExpenses, accumulatedDepreciation, recaptureTax, capitalGainTax, beforeTax, afterTax };
@@ -687,16 +693,30 @@ function calcRealEstate(inp){
 
   const discountedFlows = [];
   for(let t=1;t<=sellYear;t++) discountedFlows.push(years[t-1].cashFlowAfterTax);
-  discountedFlows.push(sale.afterTax);
+  // Sale proceeds are received in the sell year, so discount them in that
+  // same period (matches the on-screen cumulative-NPV chart) rather than as
+  // a trailing entry one period later.
+  discountedFlows[sellYear-1] += sale.afterTax;
   const npvOfCashFlows = npvCalc(inp.discountRatePct, [0, ...discountedFlows]);
-  const accumDepAtSale = Math.min(depreciableBasis, annualDepreciation*Math.min(sellYear, inp.depreciationYears));
+
+  // Realized tax savings from depreciation: the tax actually avoided each
+  // year because depreciation lowered taxable income, summed to the sell
+  // year. A loss year floors tax at zero (no carryforward), so it
+  // contributes no savings — matches the model's own tax treatment rather
+  // than crediting the full gross depreciation shield.
+  let taxSavingsFromDepreciation = 0;
+  for(let t=1;t<=sellYear;t++){
+    const yr = years[t-1];
+    const taxWithoutDepreciation = Math.max(0, yr.noi-yr.interest)*tax;
+    taxSavingsFromDepreciation += taxWithoutDepreciation - yr.taxes;
+  }
 
   return {
     years, initialEquity,
     year1CashOnCash: initialEquity>0 ? (years[0].cashFlowBeforeTax/initialEquity)*100 : 0,
     year1EquityBuildUp: initialEquity>0 ? (years[0].principal/initialEquity)*100 : 0,
     npvNetOfEquity: npvOfCashFlows - initialEquity,
-    taxSavingsFromDepreciation: accumDepAtSale*(inp.marginalTaxPct/100),
+    taxSavingsFromDepreciation,
     beforeTaxIRR, afterTaxIRR,
     saleYear: sellYear,
     netSaleProceedsAfterTax: sale.afterTax,
@@ -1384,7 +1404,7 @@ function saleForYear(t, inp, res){
   const dispExp = salePrice*(inp.expensesOnSalePct/100);
   const accumulatedDep = Math.min(depreciableBasis, annualDep*Math.min(t, inp.depreciationYears));
   const recaptureTax = accumulatedDep*(inp.marginalTaxPct/100);
-  const capGainsTax = Math.max(0, salePrice-inp.purchasePrice)*(inp.longTermCapGainsPct/100);
+  const capGainsTax = Math.max(0, salePrice-inp.purchasePrice-inp.acquisitionExpenses)*(inp.longTermCapGainsPct/100);
   const netProceeds = salePrice - dispExp - y.loanBalance - recaptureTax - capGainsTax;
   return { salePrice, capGainsTax, recaptureTax, dispExp, netProceeds };
 }
@@ -1451,7 +1471,7 @@ function buildStatementRows(inp, res){
     { label:'Sale Price', fmt:'usd', getValue:t=>saleForYear(t,inp,res).salePrice,
       formula:t=>`Value of Property × (1 + ${inp.appreciationPct}%)^${t-1} = ${fmtCurrency(saleForYear(t,inp,res).salePrice)}` },
     { label:'Capital Gains Tax', fmt:'usd', negative:true, getValue:t=>saleForYear(t,inp,res).capGainsTax,
-      formula:t=>`(Sale Price − Purchase Price) × ${inp.longTermCapGainsPct}% = ${fmtCurrency(saleForYear(t,inp,res).capGainsTax)}` },
+      formula:t=>`(Sale Price − Purchase Price − Acquisition Costs) × ${inp.longTermCapGainsPct}% = ${fmtCurrency(saleForYear(t,inp,res).capGainsTax)}` },
     { label:'Depreciation Recapture Tax', fmt:'usd', negative:true, getValue:t=>saleForYear(t,inp,res).recaptureTax,
       formula:t=>`Cumulative depreciation claimed × ${inp.marginalTaxPct}% marginal rate = ${fmtCurrency(saleForYear(t,inp,res).recaptureTax)}` },
     { label:'Disposition Expenses', fmt:'usd', negative:true, getValue:t=>saleForYear(t,inp,res).dispExp,
