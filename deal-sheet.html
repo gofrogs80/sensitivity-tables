@@ -246,6 +246,24 @@
     color:var(--text);
     margin-bottom:4px;
   }
+  .info-dot{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:13px;
+    height:13px;
+    border-radius:50%;
+    background:var(--paper-rule);
+    color:var(--muted);
+    font-family:var(--font-body);
+    font-size:9px;
+    font-weight:700;
+    text-transform:none;
+    letter-spacing:0;
+    vertical-align:2px;
+    cursor:help;
+  }
+  .info-dot:hover{ background:var(--ledger); color:#fff; }
   .stat .v{
     margin-top:auto;
     font-family:var(--font-mono);
@@ -453,6 +471,26 @@
   .legend .dot{ color:var(--brass); font-size:9px; }
 
   .actions{ margin-top:14px; display:flex; gap:10px; }
+  .explainer{
+    margin-top:28px;
+    padding-top:20px;
+    border-top:1px solid var(--paper-rule);
+    max-width:760px;
+  }
+  .explainer h3{
+    font-family:var(--font-display);
+    font-size:16px;
+    margin:0 0 10px;
+    color:var(--text);
+  }
+  .explainer p{
+    font-size:13px;
+    line-height:1.65;
+    color:var(--muted);
+    margin:0 0 12px;
+  }
+  .explainer p:last-child{ margin-bottom:0; }
+  .explainer strong{ color:var(--text); }
   .btn{
     font-family:var(--font-body);
     font-size:12.5px;
@@ -966,12 +1004,18 @@ const INPUTS = [
 ];
 
 const METRICS = {
-  year1CashOnCash:      { label:'Year 1 Cash-on-Cash', format:'percent' },
-  year1EquityBuildUp:   { label:'Year 1 Equity Build-Up', format:'percent' },
-  npvNetOfEquity:        { label:'NPV of Cash Flows', format:'currency' },
-  taxSavingsFromDepreciation: { label:'Tax Savings (Depreciation)', format:'currency' },
-  beforeTaxIRR:          { label:'Before-Tax IRR', format:'percent' },
-  afterTaxIRR:           { label:'After-Tax IRR', format:'percent' },
+  year1CashOnCash: { label:'Year 1 Cash-on-Cash', format:'percent',
+    def:'Year 1 pre-tax cash flow ÷ total cash invested (down payment + closing costs) — how much of your own money the property hands back each year, as a percentage.' },
+  year1EquityBuildUp: { label:'Year 1 Equity Build-Up', format:'percent',
+    def:"The share of your cash invested that Year 1's mortgage principal payments convert into home equity — cash flow you don't receive, but that still builds your net worth." },
+  npvNetOfEquity: { label:'NPV of Cash Flows', format:'currency',
+    def:"The present-day value of every future cash flow (including the eventual sale), discounted at your chosen discount rate, minus your initial cash invested. Positive means the deal beats that discount rate." },
+  taxSavingsFromDepreciation: { label:'Tax Savings (Depreciation)', format:'currency',
+    def:'Total income tax avoided, through your sell year, because depreciation lowers taxable income each year — recaptured (taxed back) when you sell.' },
+  beforeTaxIRR: { label:'Before-Tax IRR', format:'percent',
+    def:"Internal Rate of Return: the annualized return on your invested cash if you sell in the chosen year, before income taxes." },
+  afterTaxIRR: { label:'After-Tax IRR', format:'percent',
+    def:'Same as Before-Tax IRR, net of income tax on cash flow plus depreciation-recapture and capital-gains tax at sale.' },
 };
 
 function computeMetrics(v){ return calcRealEstate(v); }
@@ -1243,7 +1287,7 @@ function summaryStripHTML(){
         const isPrimary = k===state.metric;
         return `
           <div class="stat ${isPrimary?'highlight':''}">
-            <div class="k">${meta.label}</div>
+            <div class="k">${meta.label} <span class="info-dot" title="${meta.def.replace(/"/g,'&quot;')}">?</span></div>
             <div class="v ${val<0?'neg':''}">${fmtByFormat(val, meta.format)}</div>
           </div>`;
       }).join('')}
@@ -1386,6 +1430,12 @@ function renderTableView(container){
       <span class="swatch">Parentheses = negative</span>
     </div>
     <div class="actions"><button class="btn" id="copy-csv">Copy table as CSV</button></div>
+    <div class="explainer">
+      <h3>How this table works</h3>
+      <p>A two-way sensitivity table answers "what if?" for two assumptions at once. Pick an <strong>Output metric</strong> (one of the six pro forma returns), then pick a <strong>Row variable</strong> and <strong>Column variable</strong> — any two inputs from your sidebar. The table recomputes the full pro forma at every combination of those two, walking each one across its own range while holding <em>everything else</em> fixed at the base case shown in the sidebar.</p>
+      <p>Each cell's color shows how that combination compares to every other cell in the table — red is weaker, green is stronger, so you can spot the strongest and weakest corners at a glance. The cell outlined in brass with a dot is whichever row/column pair is closest to your actual sidebar values (your real base case) — if your sidebar value falls outside the range you've set, a warning appears above the table with a one-click fix.</p>
+      <p>The <strong>Row range</strong> / <strong>Column range</strong> boxes control the min, max, and step for each axis, independent of the broader defaults set in the <strong>⚙ Ranges</strong> panel (which also controls which inputs are offered here at all, and whether their range is a fixed manual span or a live ±% of the sidebar value). Use <strong>Copy table as CSV</strong> to paste the grid straight into a spreadsheet.</p>
+    </div>
   `;
 
   const holder = container.querySelector('#table-holder');
