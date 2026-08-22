@@ -316,7 +316,12 @@
     flex-wrap:wrap;
     gap:14px;
     margin-bottom:20px;
-    align-items:flex-end;
+    align-items:flex-start;
+  }
+  .control-stack{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
   }
   .control{
     background:#F8FAF4;
@@ -1312,28 +1317,32 @@ function tableControlsHTML(){
         <label>Output metric</label>
         <select id="ctl-metric">${metricOptions}</select>
       </div>
-      <div class="control">
-        <label>Row variable</label>
-        <select id="ctl-rowvar">${rowOptions}</select>
-      </div>
-      <div class="control">
-        <label>Row range</label>
-        <div class="range-inputs">
-          <input id="ctl-row-min" type="number" value="${rr.min}"> <span class="sep">to</span>
-          <input id="ctl-row-max" type="number" value="${rr.max}"> <span class="sep">step</span>
-          <input id="ctl-row-step" type="number" value="${rr.step}">
+      <div class="control-stack">
+        <div class="control">
+          <label>Row variable</label>
+          <select id="ctl-rowvar">${rowOptions}</select>
+        </div>
+        <div class="control">
+          <label>Column variable</label>
+          <select id="ctl-colvar">${colOptions}</select>
         </div>
       </div>
-      <div class="control">
-        <label>Column variable</label>
-        <select id="ctl-colvar">${colOptions}</select>
-      </div>
-      <div class="control">
-        <label>Column range</label>
-        <div class="range-inputs">
-          <input id="ctl-col-min" type="number" value="${cr.min}"> <span class="sep">to</span>
-          <input id="ctl-col-max" type="number" value="${cr.max}"> <span class="sep">step</span>
-          <input id="ctl-col-step" type="number" value="${cr.step}">
+      <div class="control-stack">
+        <div class="control">
+          <label>Row range</label>
+          <div class="range-inputs">
+            <input id="ctl-row-min" type="number" value="${rr.min}"> <span class="sep">to</span>
+            <input id="ctl-row-max" type="number" value="${rr.max}"> <span class="sep">step</span>
+            <input id="ctl-row-step" type="number" value="${rr.step}">
+          </div>
+        </div>
+        <div class="control">
+          <label>Column range</label>
+          <div class="range-inputs">
+            <input id="ctl-col-min" type="number" value="${cr.min}"> <span class="sep">to</span>
+            <input id="ctl-col-max" type="number" value="${cr.max}"> <span class="sep">step</span>
+            <input id="ctl-col-step" type="number" value="${cr.step}">
+          </div>
         </div>
       </div>
     </div>`;
