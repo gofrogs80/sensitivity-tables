@@ -368,18 +368,11 @@
   .range-warning .btn{ flex:0 0 auto; }
 
   /* ---------- TABLE ---------- */
-  .table-axis-wrap{
-    display:flex;
-    align-items:flex-start;
-    gap:0;
-  }
-  .y-axis-label{
-    flex:0 0 auto;
+  /* Row-axis label ("Interest Rate") is now a real rowspan'd table cell
+     spanning only the data rows, not the header — see tableHTML() for why. */
+  table.sens .row-axis-label{
     writing-mode:vertical-rl;
     transform:rotate(180deg);
-    display:flex;
-    align-items:center;
-    justify-content:center;
     background:var(--ledger-deep);
     color:var(--brass-light);
     font-family:var(--font-mono);
@@ -387,19 +380,15 @@
     font-size:11px;
     letter-spacing:.06em;
     text-transform:uppercase;
+    text-align:center;
+    vertical-align:middle;
     padding:10px 7px;
-    border-radius:0;
-    border-top-left-radius:8px;
     white-space:nowrap;
-    box-sizing:border-box;
   }
   .table-wrap{
-    flex:1;
-    min-width:0;
     overflow-x:auto;
     border:1px solid var(--paper-rule);
     border-radius:8px;
-    border-top-left-radius:0;
     background:#F8FAF4;
   }
   table.sens{
@@ -1382,25 +1371,29 @@ function tableHTML(){
 
   const fmtAxis = (val, inp, badge) => `${badge.prefix}${inp.format==='currency'? Math.round(val).toLocaleString('en-US') : val}${badge.suffix}`;
 
-  // Two independent corner cells (no rowspan) — a rowspan'd corner claims
-  // its column in BOTH header rows, but tbody rows start fresh each time
-  // (rowspan doesn't carry across the thead/tbody boundary), so the second
-  // header row's own cells were landing one column to the right of tbody's,
-  // orphaning the last data column with no header above it.
-  // The corner cell spans both header rows via rowspan — row 2 then has NO
-  // cell of its own in that column (the rowspan already occupies it), so its
-  // colVals.length cells start at column 2, exactly matching row 1's
-  // colspan=colVals.length header and tbody's own colVals.length data cells.
-  // (Giving row 2 its own extra corner cell here, or bumping the colspan by
-  // one to compensate, both reintroduce the last-column misalignment bug.)
+  // The row-axis label ("Interest Rate") is a real table cell, rowspan'd
+  // down through every data row only — it has no cell in either header row
+  // at all. So the header rows' corner cell colspans over BOTH that column
+  // and its own (colspan=2) to cover the same width, and each header row's
+  // own remaining cells still land one column over from where they'd be
+  // without the extra column, consistently across thead and tbody:
+  //   row1: corner(colspan2) + N-header(colspanN)      = 2+N
+  //   row2: (2, occupied by row1's rowspan) + N own     = 2+N
+  //   tbody row0: axis-label(rowspan) + rowlabel + N    = 1+1+N = 2+N
+  //   tbody row1+: (1, occupied) + rowlabel + N          = 1+1+N = 2+N
+  // — all four always agree, for any N, with no risk of an orphaned column.
   let thead = `<thead>
-    <tr class="axis-label"><th class="corner" rowspan="2">${metricMeta.label}</th><th colspan="${d.colVals.length}" class="axis-title">${d.colInput.label}</th></tr>
+    <tr class="axis-label"><th class="corner" colspan="2" rowspan="2">${metricMeta.label}</th><th colspan="${d.colVals.length}" class="axis-title">${d.colInput.label}</th></tr>
     <tr>${d.colVals.map(cv=>`<th>${fmtAxis(cv,d.colInput,colBadge)}</th>`).join('')}</tr>
   </thead>`;
 
   let tbody = '<tbody>';
   d.rowVals.forEach((rv, ri)=>{
-    tbody += `<tr><th>${fmtAxis(rv,d.rowInput,rowBadge)}</th>`;
+    tbody += '<tr>';
+    if(ri===0){
+      tbody += `<th class="row-axis-label" rowspan="${d.rowVals.length}">${d.rowInput.label}</th>`;
+    }
+    tbody += `<th>${fmtAxis(rv,d.rowInput,rowBadge)}</th>`;
     d.colVals.forEach((cv, ci)=>{
       const val = d.cells[ri][ci];
       const isBase = ri===d.baseRowIdx && ci===d.baseColIdx;
@@ -1418,10 +1411,7 @@ function tableHTML(){
   tbody += '</tbody>';
 
   return {
-    html: `<div class="table-axis-wrap">
-      <div class="y-axis-label">${d.rowInput.label}</div>
-      <div class="table-wrap"><table class="sens">${thead}${tbody}</table></div>
-    </div>`,
+    html: `<div class="table-wrap"><table class="sens">${thead}${tbody}</table></div>`,
     data: d,
   };
 }
@@ -1457,12 +1447,6 @@ function renderTableView(container){
   const built = tableHTML();
   holder.innerHTML = built.html;
 
-  // Size the rotated axis-label bar to exactly match the merged corner
-  // cell's rendered height (varies with row-variable label length/wrapping),
-  // rather than the old full-table-height stretch.
-  const cornerCell = holder.querySelector('table.sens .corner');
-  const axisLabelEl = holder.querySelector('.y-axis-label');
-  if(cornerCell && axisLabelEl) axisLabelEl.style.height = cornerCell.offsetHeight + 'px';
 
   const warnHolder = container.querySelector('#range-warning-holder');
   const rowOff = !built.data.rowInRange, colOff = !built.data.colInRange;
