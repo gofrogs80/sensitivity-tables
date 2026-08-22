@@ -370,7 +370,7 @@
   /* ---------- TABLE ---------- */
   .table-axis-wrap{
     display:flex;
-    align-items:stretch;
+    align-items:flex-start;
     gap:0;
   }
   .y-axis-label{
@@ -389,7 +389,9 @@
     text-transform:uppercase;
     padding:10px 7px;
     border-radius:0;
+    border-top-left-radius:8px;
     white-space:nowrap;
+    box-sizing:border-box;
   }
   .table-wrap{
     flex:1;
@@ -398,8 +400,6 @@
     border:1px solid var(--paper-rule);
     border-radius:8px;
     border-top-left-radius:0;
-    border-bottom-left-radius:0;
-    border-left:none;
     background:#F8FAF4;
   }
   table.sens{
@@ -440,7 +440,8 @@
     color:#F4F7EE !important;
     font-family:var(--font-body);
     font-weight:600;
-    text-align:left;
+    text-align:center;
+    vertical-align:middle;
     font-size:11px;
     letter-spacing:.04em;
   }
@@ -1386,9 +1387,15 @@ function tableHTML(){
   // (rowspan doesn't carry across the thead/tbody boundary), so the second
   // header row's own cells were landing one column to the right of tbody's,
   // orphaning the last data column with no header above it.
+  // The corner cell spans both header rows via rowspan — row 2 then has NO
+  // cell of its own in that column (the rowspan already occupies it), so its
+  // colVals.length cells start at column 2, exactly matching row 1's
+  // colspan=colVals.length header and tbody's own colVals.length data cells.
+  // (Giving row 2 its own extra corner cell here, or bumping the colspan by
+  // one to compensate, both reintroduce the last-column misalignment bug.)
   let thead = `<thead>
-    <tr class="axis-label"><th class="corner">${metricMeta.label}</th><th colspan="${d.colVals.length}" class="axis-title">${d.colInput.label}</th></tr>
-    <tr><th class="corner"></th>${d.colVals.map(cv=>`<th>${fmtAxis(cv,d.colInput,colBadge)}</th>`).join('')}</tr>
+    <tr class="axis-label"><th class="corner" rowspan="2">${metricMeta.label}</th><th colspan="${d.colVals.length}" class="axis-title">${d.colInput.label}</th></tr>
+    <tr>${d.colVals.map(cv=>`<th>${fmtAxis(cv,d.colInput,colBadge)}</th>`).join('')}</tr>
   </thead>`;
 
   let tbody = '<tbody>';
@@ -1449,6 +1456,13 @@ function renderTableView(container){
   const holder = container.querySelector('#table-holder');
   const built = tableHTML();
   holder.innerHTML = built.html;
+
+  // Size the rotated axis-label bar to exactly match the merged corner
+  // cell's rendered height (varies with row-variable label length/wrapping),
+  // rather than the old full-table-height stretch.
+  const cornerCell = holder.querySelector('table.sens .corner');
+  const axisLabelEl = holder.querySelector('.y-axis-label');
+  if(cornerCell && axisLabelEl) axisLabelEl.style.height = cornerCell.offsetHeight + 'px';
 
   const warnHolder = container.querySelector('#range-warning-holder');
   const rowOff = !built.data.rowInRange, colOff = !built.data.colInRange;
