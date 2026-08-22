@@ -384,6 +384,7 @@
     vertical-align:middle;
     padding:10px 7px;
     white-space:nowrap;
+    box-sizing:border-box;
   }
   .table-wrap{
     overflow-x:auto;
@@ -1446,6 +1447,13 @@ function renderTableView(container){
   const holder = container.querySelector('#table-holder');
   const built = tableHTML();
   holder.innerHTML = built.html;
+
+  // Match the row-axis label's width to the column-axis banner's height —
+  // the two "bars" framing the table on adjacent sides should read as the
+  // same visual weight.
+  const axisTitleCell = holder.querySelector('.axis-title');
+  const rowAxisLabelCell = holder.querySelector('.row-axis-label');
+  if(axisTitleCell && rowAxisLabelCell) rowAxisLabelCell.style.width = axisTitleCell.offsetHeight + 'px';
 
 
   const warnHolder = container.querySelector('#range-warning-holder');
