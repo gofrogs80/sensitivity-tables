@@ -86,6 +86,19 @@
     max-height:calc(100vh - 40px);
     overflow-y:auto;
   }
+  /* Sticks to the bottom of the visible scroll area to signal "more below"
+     — naturally runs out of room to stick once you've reached the real
+     bottom of the field list, so it disappears there on its own. */
+  .sidebar-fade{
+    position:sticky;
+    bottom:0;
+    left:0;
+    right:0;
+    height:36px;
+    margin-top:-36px;
+    pointer-events:none;
+    background:linear-gradient(180deg, transparent, var(--ink-panel) 88%);
+  }
   .sidebar-title{
     font-family:var(--font-display);
     font-size:19px;
@@ -1154,6 +1167,7 @@ function renderSidebar(){
     });
     html += `</div>`;
   });
+  html += `<div class="sidebar-fade"></div>`;
 
   sidebar.innerHTML = html;
 
