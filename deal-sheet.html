@@ -1612,6 +1612,12 @@ function renderTornadoView(container){
       <span class="swatch"><span class="box" style="background:var(--red)"></span> Weakens the metric</span>
       <span class="swatch">Brass line = base case</span>
     </div>
+    <div class="explainer">
+      <h3>How this chart works</h3>
+      <p>A tornado chart answers "which assumptions actually matter?" Pick an <strong>Output metric</strong>, and every included input gets its own bar: each one is flexed from its low to its high value — one at a time, everything else held at the base case shown in the sidebar — and the resulting metric at each end becomes that bar's left and right edge. Bars are sorted widest-swing first, so the top row is the single lever most worth getting right.</p>
+      <p>The brass vertical line marks your base case. A bar segment is <strong>green</strong> where that end of the range improves the metric versus base case, and <strong>red</strong> where it weakens it — so a bar that's mostly red on both ends means this input is more likely to hurt you than help you from here. The numbers flanking each bar are that input's actual low and high values (dollars, percent, or years, depending on the input), and the strip above and below the chart shows the overall low / base case / high for the metric itself.</p>
+      <p>Which inputs show up here, and how wide their low–high range is, is controlled by the <strong>⚙ Ranges</strong> panel — the same panel that drives the Two-Way Table's row/column options.</p>
+    </div>
   `;
 
   container.querySelector('#ctl-tornado-metric').addEventListener('change', e=>{
@@ -1928,6 +1934,12 @@ function renderStatementView(container){
     <p class="statement-hint">Hover any number to see how it's calculated.</p>
     <div class="statement-wrap">
       <table class="statement">${thead}${tbody}</table>
+    </div>
+    <div class="explainer">
+      <h3>How this statement works</h3>
+      <p>This is the same deal, projected year by year, at your sidebar's exact base case — it doesn't sweep any range, so it's the one view unaffected by your Two-Way Table or Tornado selections. Rent and expenses grow at their own inflation rates every year, the mortgage(s) amortize on their own schedule, and depreciation runs on a straight line until it's used up (the final, fractional year gets a prorated partial deduction, then stops) — all built from the exact calculation engine behind iqcalculators.com's rental property calculator.</p>
+      <p>Each group is a stage of the math, in order: <strong>Income Statement</strong> turns gross rent into net income after vacancy, expenses, interest, and depreciation. <strong>Cash Flow</strong> is what actually lands in your pocket, before and after tax. <strong>Balance Sheet</strong> tracks what you owe (loan balance) against what it's worth (property value). <strong>Disposition</strong> is a hypothetical sale in that year — sale price, taxes owed (capital gains and depreciation recapture), and net proceeds. <strong>Rate of Return</strong> is the IRR you'd realize if you sold in that specific year. <strong>Equity</strong> is simply Property Value minus Loan Balance.</p>
+      <p>Hover any number to see the exact formula and inputs behind it. Only Years 1, 3, 5, 10, 20, and 30 are shown — the underlying model actually computes every year in between.</p>
     </div>
   `;
 }
